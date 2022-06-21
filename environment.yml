@@ -1,0 +1,8 @@
+name: troposim
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - numpy>=1.21
+  - python>=3.7
+  - scipy
