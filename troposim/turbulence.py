@@ -21,7 +21,6 @@ def simulate(
     p0=1e-2,
     freq0=1e-4,
     resolution=60.0,
-    distribution="uniform",
     density=False,
     seed=None,
     verbose=False,
@@ -51,10 +50,6 @@ def simulate(
         resolution (float): spatial resolution of output, in meters
         density (bool, optional): Indicates the `p0` argument is for a density
             If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
-        distribution: {'uniform', 'normal'}: choice of random number distrubtion for
-            starting noise simulation (default='uniform').
-            TODO: I think this may not matter, as it's really just to randomize the phase
-            and both produce uniform distributions of phases
         seed (int): number to seed random numbers, for reproducible turbulence
         verbose (bool): print extra debug info
 
@@ -120,14 +115,11 @@ def simulate(
         beta = np.array([Polynomial(beta)])
     if verbose:
         print(f"Simulation PSD polynomial: {beta = }")
+
+    # simulate white noise signal
     rng = np.random.default_rng(seed) if seed is not None else RNG
-    # simulate white noise signal of some distribution
-    rand_func = getattr(rng, distribution)
-    # print(distribution)
-    # all new numpy random funcs should have same API:
-    h = rand_func(size=shape)
+    h = rng.uniform(size=shape)
     H = fft2(h)
-    # H = fftshift(H, axes=(-2, -1))
 
     # The power beta/2 is used because the power spectral
     # density is proportional to the amplitude squared
@@ -165,15 +157,11 @@ def simulate(
     # correct dividing by zero
     P[..., lmbda == 0] = 1.0
     # Pad with front axis if simulating multiple images
-    # if num_images > 1:
-    # P = P[np.newaxis, :, :]
     H_shaped = H / P
 
     # Make output zero mean by zeroing the top left (0 freq) element
     H_shaped[..., 0, 0] = 0.0
     fsurf = ifft2(H_shaped).real
-    # keeping the dims will work for either 2D or 3D
-    # fsurf -= np.mean(fsurf, axis=(-2, -1), keepdims=True)
     # calculate the power spectral density of 1st realization so that we can scale
     p1 = get_psd(fsurf, resolution=resolution, freq0=freq0, density=density)[0]
 
@@ -183,30 +171,6 @@ def simulate(
     # add the "expand_dims" for the 3D case to broadcast to (num_images, rows, cols)
     H_shaped *= np.expand_dims(norm_factor, axis=(-2, -1))
     fsurf = ifft2(H_shaped).real
-
-    # # scale the power of the noise to match the power requested
-    # deg = len(beta.coef) - 1
-    # density = False  # TODO: do i want density here...
-    # psd2d = np.abs(fftshift(H_shaped, axes=(-2, -1))) ** 2 / (length * width)
-    # if psd2d.ndim == 2:
-    #     psd2d = np.expand_dims(psd2d, axis=0)
-    # p0_hat = np.zeros(psd2d.shape[0])
-    # for idx, pp in enumerate(psd2d):
-    #     freq, psd1d = average_psd_radial(psd2d, resolution=resolution, density=density)
-    #     # We only need the p0 part, the intercept
-    #     p0_hat[idx] = power_slope(freq, psd1d, freq0=freq0, deg=deg)[0]
-
-    # # scale the spectrum at the appropriate `freq0`
-    # norm_factor = np.sqrt(np.array(p0) / p0_hat)
-
-    # # shape will be (num_images,), or () for 1 image case
-    # # add the "expand_dims" for the 3D case to broadcast to (num_images, rows, cols)
-    # H_shaped *= np.expand_dims(norm_factor, axis=(-2, -1))
-    # # Make zero mean before inverse fft (TODO: is this necessary? I already zeroed the top left)
-    # # H_shaped[..., 0, 0] = 0.0
-
-    # fsurf = ifft2(H_shaped).real
-    # fsurf -= np.mean(fsurf, axis=(-2, -1), keepdims=True)
     return np.squeeze(fsurf)
 
 
@@ -239,8 +203,6 @@ def get_psd(
         Variation of checkfr.m (Ramon Hanssen, 2000)
 
     """
-    # TODO: Should i just make this handle 2d or 3D through broadcasting?
-    # For now...
     if image.ndim > 2:
         return get_psd_stack(
             image,
@@ -399,12 +361,6 @@ def average_psd_radial(
 
     # average all psd2d pixels with label 'r' for 0<=r<=wc
     psd1d = ndimage.mean(psd2d, r, index=np.arange(0, num_r))
-
-    # if density:
-    # TODO Do i just ignore? integral of theta....maybe detheta is unitless
-    # mult by factor of `resolution` to account for integration out of 1 spatial dimension
-    # Delta_f = (1/Delta_x), so multiplying by Delta_f is same as dividing by Delta_x
-    # psd1d /= resolution
 
     # Also return the positive frequencies with this
     N = min(h, w)
@@ -640,45 +596,3 @@ def _get_theta_sectors(psd2d, dTheta, r_min=0, r_max=np.inf):
     mask = np.logical_and(R >= r_min, R < r_max)
     theta = np.where(mask, theta, np.nan)
     return theta
-
-
-# OLD WAY (slower, 6 sec for (2000, 2000). new way takes 88 ms)
-def radial_average_spectrum(psd2d, resolution):
-    """Calculate the radially averaged power spectrum
-    Inputs:
-        psd2d: 2D ndarray of size (N,N) for 2D power spectral density
-        resolution (float), spatial resolution of input data in meters
-    Returns:
-        freq: 1D ndarray of size int(N/2 - 1) for frequency in radial direction
-        psd1d: ndarray of size int(N/2 - 1) for power spectral density
-    """
-    # The frequency coordinate in cycle / m
-    # freq0 is in cycles / m, so freq0=1e-3 is 1 cycle / km
-    N = min(psd2d.shape[1:])
-    freq = fftfreq(N, d=resolution)
-    df = freq[1] - freq[0]
-    freq = fftshift(freq)
-
-    # Radially average freq vectors
-    ky, kx = np.meshgrid(freq, freq)
-    k = np.sqrt(np.square(kx) + np.square(ky))
-    # labels_low = np.zeros_like(k)
-    # labels_high = np.zeros_like(k)
-
-    # rotationally averaged 1D spectrum from 2D spectrum
-    # psd1d = np.zeros(int(N / 2 - 1)) # OLD, fails on odd
-    psd1d = np.zeros((N - 1) // 2)
-    for i in range(len(psd1d)):
-        lower_bound = k >= (i + 0.5) * df
-        upper_bound = k <= (i + 1.5) * df
-        bound = np.logical_and(lower_bound, upper_bound)
-        cur_vals = psd2d[bound]
-        # labels_low[bound] = (i + 0.5) * df
-        # labels_high[bound] = (i + 1.5) * df
-        psd1d[i] = np.mean(cur_vals)
-
-    # Only consider one half of spectrum (due to symmetry)
-    freq_pos = freq[freq > 0]
-    # breakpoint()
-    return freq_pos, psd1d
-    # return freq_pos, psd1d, labels_low, labels_high

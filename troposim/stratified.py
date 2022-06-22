@@ -106,5 +106,5 @@ def _get_param_sizes(K, h0, alpha):
     nk, nh, na = len(K), len(h0), len(alpha)
     lengths = set([nk, nh, na])
     if len(lengths) > 2 or (len(lengths) > 1 and 1 not in lengths):
-        raise ValueError(f"K, h0, and alpha must all have the same length or length 1")
+        raise ValueError("K, h0, and alpha must all have the same length or length 1")
     return K, h0, alpha
