@@ -19,7 +19,6 @@ Usage:
 """
 import logging
 import time
-
 from logging import Formatter
 
 COLORS = False
@@ -27,20 +26,43 @@ COLORS = False
 
 def get_log(debug=False, name=__file__, verbose=False):
     """Creates a nice log format for use across multiple files.
-
+    
     Default logging level is INFO
 
-    Args:
-        name (Optional[str]): The name the logger will use when printing statements
-        debug (Optional[bool]): If true, sets logging level to DEBUG
+    Parameters
+    ----------
+    name : Optional[str]
+        The name the logger will use when printing statements (Default value = __file__)
+    debug : Optional[bool]
+        If true, sets logging level to DEBUG (Default value = False)
+    verbose :
+        (Default value = False)
 
+    Returns
+    -------
+
+    
     """
     logger = logging.getLogger(name)
     return format_log(logger, debug=debug, verbose=verbose)
 
 
 def format_log(logger, debug=False, verbose=False):
-    """Makes the logging output pretty and colored with times"""
+    """Makes the logging output pretty and colored with times
+
+    Parameters
+    ----------
+    logger : logging.Logger
+        
+    debug : bool
+        (Default value = False)
+    verbose : bool
+        (Default value = False)
+
+    Returns
+    -------
+    logging.Logger
+    """
     log_level = logging.DEBUG if debug else logging.INFO
     format_ = "[%(asctime)s] [%(levelname)s %(filename)s] %(message)s"
     formatter = Formatter(format_, datefmt="%m/%d %H:%M:%S")
@@ -72,28 +94,30 @@ logger = get_log()
 
 
 def log_runtime(f):
-    """
-    Logs how long a decorated function takes to run
+    """Decorator to log how long a decorated function takes to run
 
-    Args:
-        f (function): The function to wrap
-
-    Returns:
-        function: The wrapped function
-
-    Example:
-        >>> @log_runtime
-        ... def test_func():
-        ...    return 2 + 4
-        >>> test_func()
-        6
-
-    This prints out to stderr the following in addition to the answer:
-    [05/26 10:05:51] [INFO log.py] Total elapsed time for test_func (minutes): 0.00
-
+    Usage
+    -----
+    @log_runtime
+    def test_func():
+        return 2 + 4
     """
 
     def wrapper(*args, **kwargs):
+        """
+
+        Parameters
+        ----------
+        *args :
+            
+        **kwargs :
+            
+
+        Returns
+        -------
+
+        
+        """
         t1 = time.time()
 
         result = f(*args, **kwargs)

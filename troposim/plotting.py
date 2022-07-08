@@ -9,6 +9,28 @@ CMAP = "RdBu_r"
 
 
 def plot_stack(stack, titles=None, ntotal=9, cmap=CMAP, figsize=(8, 8)):
+    """
+
+    Parameters
+    ----------
+    stack :
+        
+    titles :
+        (Default value = None)
+    ntotal :
+        (Default value = 9)
+    cmap :
+        (Default value = CMAP)
+    figsize :
+        (Default value = (8)
+    8) :
+        
+
+    Returns
+    -------
+
+    
+    """
     nrow = ncol = int(np.sqrt(ntotal))
     fig, axes = plt.subplots(nrow, ncol, figsize=figsize)
     vmin = np.min(stack)
@@ -38,7 +60,48 @@ def plot_psd(
     slopes=[],
     vm=None,
 ):
-    """Plot the result of `turbulence.get_psd`"""
+    """Plot the result of `turbulence.get_psd`
+
+    Parameters
+    ----------
+    data :
+        
+    freq :
+        (Default value = None)
+    psd1d :
+        (Default value = None)
+    freq0 :
+        (Default value = 1e-4)
+    axes :
+        (Default value = None)
+    outfig :
+        (Default value = None)
+    cmap :
+        (Default value = CMAP)
+    color :
+        (Default value = "k")
+    label :
+        (Default value = None)
+    resolution :
+        (Default value = None)
+    density :
+        (Default value = True)
+    marker :
+        (Default value = None)
+    in_mm :
+        (Default value = False)
+    per_km :
+        (Default value = True)
+    slopes :
+        (Default value = [])
+    vm :
+        (Default value = None)
+
+    Returns
+    -------
+
+    
+    """
     if freq is None or psd1d is None:
         from . import turbulence
 
@@ -100,6 +163,42 @@ def plot_psd1d(
     slopes=[],
     **plotkwargs,
 ):
+    """
+
+    Parameters
+    ----------
+    freq :
+        
+    psd1d :
+        
+    ax :
+        (Default value = None)
+    freq0 :
+        (Default value = None)
+    label :
+        (Default value = None)
+    color :
+        (Default value = "k")
+    linestyle :
+        (Default value = "-")
+    marker :
+        (Default value = None)
+    density :
+        (Default value = True)
+    per_km :
+        (Default value = True)
+    in_mm :
+        (Default value = False)
+    slopes :
+        (Default value = [])
+    **plotkwargs :
+        
+
+    Returns
+    -------
+
+    
+    """
     if ax is None:
         fig, ax = plt.subplots()
 
@@ -147,6 +246,26 @@ def plot_stack_over_time(
     igram_stack=None,  # Just for colorbar
     cmap="seismic_wide_y",
 ):
+    """
+
+    Parameters
+    ----------
+    avgs :
+        
+    sar_dates_used :
+        
+    vm :
+        (Default value = None)
+    igram_stack :
+        (Default value = None)
+    # Just for colorbarcmap :
+        (Default value = "seismic_wide_y")
+
+    Returns
+    -------
+
+    
+    """
 
     if vm is None:
         if igram_stack is not None:
@@ -178,6 +297,36 @@ def plot_psd1d_azimuth(
     marker="o",
     **plotkwargs,
 ):
+    """
+
+    Parameters
+    ----------
+    angles :
+        
+    psd1d :
+        
+    ax :
+        (Default value = None)
+    label :
+        (Default value = None)
+    ylim :
+        (Default value = (0)
+    1) :
+        
+    color :
+        (Default value = "k")
+    # linestyle :
+        (Default value = "-")
+    marker :
+        (Default value = "o")
+    **plotkwargs :
+        
+
+    Returns
+    -------
+
+    
+    """
     if not ax:
         fig, ax = plt.subplots()
 

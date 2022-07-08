@@ -17,9 +17,29 @@ def create_deramped_zarr(
 ):
     """Create a deramped zarr file from a list of average SLCs
 
-    Args:
-        avg_slcs ([type]): [description]
-        deramped_file ([type]): [description]
+    Parameters
+    ----------
+    avg_slcs : [type]
+        [description]
+    deramped_file : [type]
+        [description]
+    avg_slc_file :
+        
+    mask :
+        (Default value = None)
+    ds :
+        (Default value = "igrams")
+    units :
+        (Default value = "rad")
+    scaling :
+        (Default value = 1.0)
+    overwrite :
+        (Default value = False)
+
+    Returns
+    -------
+
+    
     """
     try:
         import xarray as xr
@@ -68,19 +88,31 @@ def get_all_1d_psd_curves(
 ):
     """Get all 1D radially averaged power spectrum curves averaged for a region
 
-    Args:
-        avg_ifgs (xr.DataArray): average interferograms
-        resolution (float): spatial resolution of input data in meters
-        min_date (datetime): minimum date to include in the analysis
-        max_date (datetime): maximum date to include in the analysis
-        save_dir (str): directory to save the output to in .npz file
+    Parameters
+    ----------
+    avg_ifgs : xr.DataArray
+        average interferograms
+    resolution : float
+        spatial resolution of input data in meters (Default value = 180)
+    min_date : datetime
+        minimum date to include in the analysis (Default value = None)
+    max_date : datetime
+        maximum date to include in the analysis (Default value = None)
+    save_dir : str
+        directory to save the output to in .npz file (Default value = ".")
+    freq0 :
+        (Default value = 1e-4)
+    deg :
+        (Default value = 3)
+    density :
+        (Default value = True)
+    load :
+        (Default value = True)
 
-    Returns:
-        p0_hat_arr (ndarray[float]) estimates of power spectral density at ref frequency [in m^2]
-        beta_hat_list (List[Polynomial]): list of estimates of slope of loglog power profile
-        freq (1D ndarray): frequency [cycle/m]
-        psd1d_arr (ndarray)): list of power spectral density [m^2] size=(num_images, len(freq))
+    Returns
+    -------
 
+    
     """
     stack = avg_ifgs.sel(date=slice(min_date, max_date))
     # stack_data = stack.as_numpy()

@@ -34,8 +34,7 @@ def displacement(
     shape=None,
     n=200,
 ):
-    """
-    source_depth (float): the depth of the fault origin
+    """source_depth (float): the depth of the fault origin
     dip_angle (float): the dip-angle, in degrees, of the rectangular dislocation surface
     strike_width (float):  the along-strike width of the surface
     dip_width (float):  the along-dip range of the surface
@@ -49,13 +48,47 @@ def displacement(
     obs_depth (float): the depth of the observation point. Defaults to 0.0, the surface
     n (int): the number of points per direction to sample the surface. Defaults to 200.
 
-    Returns:
-        u (ndarray): the displacement field, in meters, at the observation point
-            shape: (3, n, n): [ux, uy, uz]
-        xx (ndarray): the x-coordinates of the grid
-        yy (ndarray): the y-coordinates of the grid
+    Parameters
+    ----------
+    source_depth :
+        
+    dip_angle :
+        
+    strike_width :
+        
+    dip_width :
+        
+    alpha :
+        (Default value = None)
+    mu :
+        (Default value = None)
+    lam :
+        (Default value = None)
+    poisson_ratio :
+        (Default value = 0.25)
+    strike_angle :
+        (Default value = 0.0)
+    rake_angle :
+        (Default value = 0.0)
+    slip_magnitude :
+        (Default value = 0.0)
+    strike_slip :
+        (Default value = 0.0)
+    dip_slip :
+        (Default value = 0.0)
+    obs_depth :
+        (Default value = 0.0)
+    xy_extent :
+        (Default value = None)
+    shape :
+        (Default value = None)
+    n :
+        (Default value = 200)
 
-    Examples:
+    Returns
+    -------
+
+    
     >>> success, u, grad_u = dc3dwrapper(0.6, [1.0, 1.0, -1.0],
                                 3.0, 90, [-0.7, 0.7], [-0.7, 0.7],
                                 [1.0, 0.0, 0.0])
@@ -113,17 +146,21 @@ def displacement(
 def project_to_los(u, los):
     """Projects a displacement field to a line of sight.
 
-    Args:
-        u (ndarray): the displacement field from `displacement`
-            shape: (3, ny, nx): [ux, uy, uz]
-        los (ndarray): the line of sight unit vector at the observation point
-            Can be a single vector, or an array the same size as u.
-            shape: (3,): [losx, losy, losz]
-            Can be the "ENU" vector of coefficients.
+    Parameters
+    ----------
+    u : ndarray
+        the displacement field from `displacement`
+        shape: (3, ny, nx): [ux, uy, uz]
+    los : ndarray
+        the line of sight unit vector at the observation point
+        Can be a single vector, or an array the same size as u.
+        shape: (3,): [losx, losy, losz]
+        Can be the "ENU" vector of coefficients.
 
-    Returns:
-        u_los (ndarray): the displacement field projected to the line of sight
-            shape: (ny, nx)
+    Returns
+    -------
+
+    
     """
     los = np.array(los)
     # assert this?
@@ -137,16 +174,21 @@ def project_to_los(u, los):
 
 
 def rake_to_slips(rake_angle, slip_magnitude):
-    """
-    rake_angle (float): the rake angle of the fault, in degrees
+    """rake_angle (float): the rake angle of the fault, in degrees
     slip_magnitude (float): the magnitude of the fault slip, in meters. For use with rake_angle
 
-    Returns:
-        strike_slip (float): the strike-slip, in meters, of the rectangular dislocation surface
-        dip_slip (float): the dip-slip, in meters, of the rectangular dislocation surface
+    Parameters
+    ----------
+    rake_angle :
+        
+    slip_magnitude :
+        
 
-    Examples:
-        >>> rake_to_slips(-90, 0.1) # purely dip slip on normal fault
+    Returns
+    -------
+
+    
+    >>> rake_to_slips(-90, 0.1) # purely dip slip on normal fault
         0.0, -0.1
         >>> rake_to_slips(0, 0.1) # pure left lateral strike slip
         0.1, 0.0
@@ -172,6 +214,56 @@ def random_displacement(
     seed=None,
     **kwargs,
 ):
+    """
+
+    Parameters
+    ----------
+    source_depth_range :
+        (Default value = (0.3e3)
+    5e3) :
+        
+    dip_angle_range :
+        (Default value = (0)
+    90) :
+        
+    strike_angle_range :
+        (Default value = (0)
+    360) :
+        
+    strike_width_range :
+        (Default value = (5e3)
+    20e3) :
+        
+    dip_width_range :
+        (Default value = (300)
+    1000) :
+        
+    rake_angle_range :
+        (Default value = (-89)
+    -91) :
+        
+    # dip slipslip_magnitude_range :
+        (Default value = (0.05)
+    0.5) :
+        
+    alpha :
+        (Default value = 0.66)
+    resolution :
+        (Default value = 180)
+    shape :
+        (Default value = (200)
+    200) :
+        
+    seed :
+        (Default value = None)
+    **kwargs :
+        
+
+    Returns
+    -------
+
+    
+    """
     # see https://stackoverflow.com/a/49849045/4174466 for why RandomState
     rng = np.random.default_rng(seed=seed)
     kwargs["source_depth"] = rng.uniform(*source_depth_range)
@@ -204,6 +296,28 @@ def test_okada(
     slip_magnitude=0.0,
     strike_angle=0.0,
 ):
+    """
+
+    Parameters
+    ----------
+    dip_slip :
+        (Default value = 0.1)
+    strike_slip :
+        (Default value = 0.0)
+    dip_angle :
+        (Default value = 45.0)
+    rake_angle :
+        (Default value = None)
+    slip_magnitude :
+        (Default value = 0.0)
+    strike_angle :
+        (Default value = 0.0)
+
+    Returns
+    -------
+
+    
+    """
     import matplotlib.pyplot as plt
 
     # Mentone Eq:

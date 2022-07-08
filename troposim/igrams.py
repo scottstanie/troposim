@@ -10,6 +10,8 @@ from . import turbulence, utils
 
 @dataclass
 class IgramMaker:
+    """Class for creating synthetic interferograms """
+
     num_days: int = 10
     shape: Tuple[int] = (700, 700)
     start_date: date = date(2018, 1, 1)
@@ -30,6 +32,7 @@ class IgramMaker:
     distribution: str = "normal"
 
     def make_sar_dates(self):
+        """ """
         sar_date_list = []
         for idx in range(self.num_days):
             sar_date_list.append(
@@ -48,6 +51,26 @@ class IgramMaker:
         p0_rv=None,
         seed=None,
     ):
+        """
+
+        Parameters
+        ----------
+        beta :
+             (Default value = None)
+        beta_arr :
+             (Default value = None)
+        beta_savename :
+             (Default value = None)
+        p0_params :
+             (Default value = None)
+        p0_arr :
+             (Default value = None)
+        p0_rv :
+             (Default value = None)
+        seed :
+             (Default value = None)
+
+        """
 
         from scipy import stats
 
@@ -111,13 +134,18 @@ class IgramMaker:
         self.sar_date_list = sar_date_list
         return sar_stack, sar_date_list
 
-    def make_defo_stack(
-        self, defo_shape="gaussian", **kwargs
-    ):
+    def make_defo_stack(self, defo_shape="gaussian", **kwargs):
         """Create the time series of deformation to add to each SAR date
 
-        Args:
-            defo_shape (str, optional): Name of a function from `troposim.synthetic`. Defaults to "gaussian".
+        Parameters
+        ----------
+        defo_shape : str
+            Name of a function from `troposim.synthetic`. Defaults to "gaussian".
+
+        Returns
+        -------
+        defo_stack : np.ndarray (3D)
+
         """
         from .deformation import synthetic
 
@@ -132,7 +160,9 @@ class IgramMaker:
         final_defo = defo_func(shape=self.shape, **kwargs).reshape((1, *self.shape))
         final_defo /= np.max(final_defo)
         # Broadcast this shape with piecewise linear evolution
-        time_evolution = self._make_time_evolution(self.defo_rates, smooth=self.smooth_defo_days)
+        time_evolution = self._make_time_evolution(
+            self.defo_rates, smooth=self.smooth_defo_days
+        )
         self.defo_stack = final_defo * time_evolution
 
         return self.defo_stack
@@ -147,6 +177,30 @@ class IgramMaker:
         sar_stack=None,
         **sar_stack_kwargs,
     ):
+        """
+
+        Parameters
+        ----------
+        save_ext :
+             (Default value = None)
+        independent :
+             (Default value = True)
+        max_date :
+             (Default value = None)
+        max_date_idx :
+             (Default value = None)
+        max_temporal_baseline :
+             (Default value = 5000)
+        sar_stack :
+             (Default value = None)
+        **sar_stack_kwargs :
+
+
+        Returns
+        -------
+        ndarray
+            3D stack of interferograms
+        """
         if sar_stack is None:
             if self.sar_stack is None:
                 print("Creating sar_stack")
@@ -195,6 +249,7 @@ class IgramMaker:
         return igram_stack
 
     def subtract_reference(self, igram_stack, ref=None):
+        """Subtract a reference from the interferogram stack"""
         if ref is None:
             ref = self.ref
         # Add nones to keep 3D
@@ -216,14 +271,30 @@ class IgramMaker:
         time_evolution = [0]
         for days, rate in zip(diffs, rates_intp[1:]):
             time_evolution.append(time_evolution[-1] + days * (rate / 365.25))
-        time_evolution =  np.array(time_evolution)
-        
+        time_evolution = np.array(time_evolution)
+
         if smooth:
-            time_evolution = np.convolve(time_evolution, np.ones(smooth) / smooth, mode='same')
+            time_evolution = np.convolve(
+                time_evolution, np.ones(smooth) / smooth, mode="same"
+            )
         return time_evolution.reshape((-1, 1, 1))
 
     def _select_independent(self, sar_date_list, mid_date=None, num_ifg=None):
-        """Choose a list of `num_ifg` independent interferograms spanning `mid_date`"""
+        """Choose a list of `num_ifg` independent interferograms spanning `mid_date`
+
+        Parameters
+        ----------
+        sar_date_list : list[datetime]
+
+        mid_date : datetime, optional
+             (Default value = None)
+        num_ifg : int, optional
+             (Default value = None)
+
+        Returns
+        -------
+        stack_ifgs : list[(datetime, datetime)]
+        """
 
         if mid_date is not None:
             insert_idx = np.searchsorted(sar_date_list, mid_date)
@@ -248,7 +319,7 @@ class IgramMaker:
 
 def create_igrams(num_days=50):
     igm = IgramMaker(num_days=num_days)
-    sar_stack, sar_date_list = igm.make_sar_stack(seed=None)
+    _, sar_date_list = igm.make_sar_stack(seed=None)
     igram_stack, igram_date_list = igm.make_igram_stack()
     return sar_date_list, igram_date_list, igram_stack
 
@@ -265,6 +336,30 @@ def stack_over_time(
     """Create a series of stacking solutions with progressively longer time window
 
     Can be plotted with plotting.plot_stack_over_time
+
+    Parameters
+    ----------
+    sar_date_list : list[datetime]
+
+    igram_date_list : list[tuple(datetime, datetime)]
+
+    igram_stack : np.ndarray
+
+    start_idx : int, optional
+         (Default value = 5)
+    skip : int, optional
+         (Default value = 2)
+    ntotal : int, optional
+         (Default value = 9)
+    verbose : bool, optional
+         (Default value = False)
+
+    Returns
+    -------
+    defos : list[np.ndarray]
+    last_dates : list[datetime]
+    num_ifgs : list[int]
+    num_sar : list[int]
     """
 
     defos, last_dates, num_ifgs, num_sar = [], [], [], []

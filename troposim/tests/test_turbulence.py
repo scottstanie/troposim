@@ -4,20 +4,24 @@ import numpy as np
 
 
 class TestSimulate:
+    """ """
     freq0 = 2.0e-3
     shape2d = (10, 10)
     shape3d = (4, 10, 10)
 
     def test_default(self):
+        """ """
         turbulence.simulate()
 
     def test_shapes(self):
+        """ """
         out = turbulence.simulate(shape=(10, 10), freq0=self.freq0)
         assert out.shape == (10, 10)
         out = turbulence.simulate(shape=(2, 10, 10), freq0=self.freq0)
         assert out.shape == (2, 10, 10)
 
     def test_beta_types(self):
+        """ """
         # Scalar test
         b = 2.5
         out = turbulence.simulate(shape=self.shape2d, beta=b, freq0=self.freq0)
@@ -37,6 +41,7 @@ class TestSimulate:
 
 
 def test_get_psd():
+    """ """
     shape = (200, 200)
     p0 = 1e-3
     b = -2.5

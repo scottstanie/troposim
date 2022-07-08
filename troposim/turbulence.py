@@ -27,66 +27,52 @@ def simulate(
     verbose=False,
 ):
     """Simulate zero-mean, 2D isotropic turbulence with a power-law power spectral density (PSD)
-
+    
     Can use either a single slope for beta, or a numpy Polynomial which is fit
     to log10(power) vs log10(frequency)
-
+    
     For simple turbulence (one PSD slope), try out:
     beta = 3.0 for larger scale turbulence (long spatial correlations, large blobs)
     beta = 2.0 for middle scale turbulence
     beta = 1.3 for small scale turbulence
 
-    Args:
-        shape: Tuple[float]: (rows, cols), or (num_images, rows, cols) of output
-            If passing 3D shape, will use same `beta` for all layers of output
-        beta: float, Polynomial, polynomial coefficients, or array of Polynomials
-            For scalar: power law exponent for the slope of the radially averaged 2D spectrum.
-            Polynomial: result from fit of radially averaged PSD vs frequency, in log-log scale
-                (or, see result from `get_psd`)
-            array of Polynomials: one for each layer of output. Must match 3D shape.
-        p0 (float, ndarray[float]) default=1e-2: multiplier of power spectral density
-            in m^2 (if `density=False`. otherwise, unit is m^2 / (1/m^2))
+    Parameters
+    ----------
+    shape :
+        Tuple[float]: (rows, cols), or (num_images, rows, cols) of output
+        If passing 3D shape, will use same `beta` for all layers of output (Default value = (300)
+    beta :
+        float, Polynomial, polynomial coefficients, or array of Polynomials
+        For scalar: power law exponent for the slope of the radially averaged 2D spectrum.
+        Polynomial: result from fit of radially averaged PSD vs frequency, in log-log scale
+        (or, see result from `get_psd`)
+        array of Polynomials: one for each layer of output. Must match 3D shape. (Default value = 2.5)
+    p0 : float
+        multiplier of power spectral density
+        in m^2 (if `density=False`. otherwise, unit is m^2 / (1/m^2)) (Default value = 1e-2)
+    p0 : float
+        multiplier of power spectral density
+        in m^2 (if `density=False`. otherwise, unit is m^2 / (1/m^2))
         freq0 (float), reference spatial freqency (where p0 defined), in cycle / m
-            (default 1e-4, or 1 cycle/10 km)
-        resolution (float): spatial resolution of output, in meters
-        density (bool, optional): Indicates the `p0` argument is for a density
-            If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
-        seed (int): number to seed random numbers, for reproducible turbulence
-        verbose (bool): print extra debug info
+        (default 1e-4, or 1 cycle/10 km)
+    resolution : float
+        spatial resolution of output, in meters (Default value = 60.0)
+    density : bool
+        Indicates the `p0` argument is for a density
+        If True, output units will be (Amplitude^2) / (1 / (sampling units)^2) (Default value = False)
+    seed : int
+        number to seed random numbers, for reproducible turbulence (Default value = None)
+    verbose : bool
+        print extra debug info (Default value = False)
+    300) :
+        
+    freq0 :
+        (Default value = 1e-4)
 
-    Returns:
-        fsurf (ndarray) equal size to `shape`, units = meters
+    Returns
+    -------
 
-    Example:
-        step = 120 # meters
-        shape = (500, 500)
-        tropo = simulate(shape=shape, resolution=step)
-
-        # To get noise which matches the power from real image:
-        p0 = get_psd(image, resolution=step)[0]
-        tropo = simulate(shape=shape, resolution=step, p0=p0)
-
-    Notes:
-        1. The beta spectral index values are for the 2D radial average for a surface,
-        P(k) for k = sqrt(kx**2 + ky**2).
-        The 1D version obtained by a line slice through the surface will have a PSD slope
-        of beta-1. For example, to get the same roughness as a line with spectral index
-        beta = 1.5, you should pass the value beta=2.5
-        2. We use the 2D beta so the output of the simulator matches the result from
-        get_psd (which radially averages data)
-
-    Originally based on the [5/3, 8/3, 2/3] power law from Hanssen (2001):
-    E.g. equation (4.7.28) from Hanssen (2001):
-    P_phi(f) =  P_I(f/f0)   ^ -5/3    for 1.5  <= f0/f <= 50   km (regime[1]-regime[0])
-                P_0(f/f0)   ^ -8/3    for 0.25 <= f0/f <= 1.5  km (regime[0])
-                P_III(f/f0) ^ -2/3    for 0.02 <= f0/f <= 0.25 km (regime[2]-regime[1])
-    # (TODO: these inequalities dont make sense with units? might just be 1/f)
-
-
-    Reference:
-        Hanssen, R. F. (2001). Radar interferometry: data interpretation and
-        error analysis (Vol. 2). Springer Science & Business Media.
-        Code orignially based on the fracsurfatmo.m written by Ramon Hanssen, 2000.
+    
     """
     if p0 is None or np.all(np.array(p0) == 0):
         return np.zeros(shape)
@@ -187,22 +173,34 @@ def get_psd(
     """Get the radially averaged 1D PSD of input 2D matrix
     Table 4.5 in Hanssen, 2001 (Page 143) has further explaination of outputs.
 
-    Args:
-        image (2D ndarray) :  displacement in m.
+    Parameters
+    ----------
+    image : 2D ndarray
+        displacement in m. (Default value = None)
+    image : 2D ndarray
+        displacement in m.
+        resolution (float), spatial resolution of input image in meters (Default value = None)
+    image : 2D ndarray
+        displacement in m.
         resolution (float), spatial resolution of input image in meters
-        freq0 (float), reference spatial freqency in cycle / m.
-        deg (int): degree of Polynomial to fit to PSD. default = 3, cubic
-        crop (bool): crop the image into a square image with fewest non-zero pixels
-        N (int): size to crop square (defaults to size of smaller side)
-    Returns:
-        p0_hat (float) estimate of power spectral density at ref frequency [in m^2]
-        beta_hat : numpy.polynomial.Polynomial, the best bit to power profile in loglog scale
-        freq (1D ndarray): frequency [cycle/m]
-        psd1d (1D ndarray): power spectral density [m^2]
+        freq0 (float), reference spatial freqency in cycle / m. (Default value = None)
+    deg : int
+        degree of Polynomial to fit to PSD. default = 3, cubic
+    crop : bool
+        crop the image into a square image with fewest non-zero pixels (Default value = True)
+    resolution :
+        (Default value = 60.0)
+    freq0 :
+        (Default value = 1e-4)
+    N :
+        (Default value = None)
+    density :
+        (Default value = False)
 
-    Notes:
-        Variation of checkfr.m (Ramon Hanssen, 2000)
+    Returns
+    -------
 
+    
     """
     if image.ndim > 2:
         return get_psd_stack(
@@ -238,23 +236,32 @@ def get_psd2d(
 ):
     """Calculate the 2d Power spectral density of and image/stack of images
 
-    Args:
-        image (ndarray): image or stack of images
-        shift (bool, optional): apply `fftshift` in the Fourier domain. Defaults to True.
-        crop (bool, optional): Crop the image to a square of size `N`. Defaults to False.
-        N ([type], optional): For cropping, size of square. Defaults to None.
-            If None, will find the largest sqaure with greatest number of nonzeros
-            (see `utils.crop_square_data`)
-        density (bool, optional): Normalize the PSD to be a density. Defaults to True.
-            If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
-            E.g. for an image with units centimeters, with pixel spacing of 1 meters,
-            the PSD will have units (cm^2) / (1/m)^2.
-            Otherwise, will only normalize by (1/(rows*cols))
-        resolution (float, optional): spatial resolution of input image in meters
-            used if `density=False,` to normalize.
+    Parameters
+    ----------
+    image : ndarray
+        image or stack of images (Default value = None)
+    shift : bool
+        apply `fftshift` in the Fourier domain. Defaults to True.
+    crop : bool
+        Crop the image to a square of size `N`. Defaults to False.
+    N : [type]
+        For cropping, size of square. Defaults to None.
+        If None, will find the largest sqaure with greatest number of nonzeros
+        (see `utils.crop_square_data`)
+    density : bool
+        Normalize the PSD to be a density. Defaults to True.
+        If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
+        E.g. for an image with units centimeters, with pixel spacing of 1 meters,
+        the PSD will have units (cm^2) / (1/m)^2.
+        Otherwise, will only normalize by (1/(rows*cols))
+    resolution : float
+        spatial resolution of input image in meters
+        used if `density=False,` to normalize. (Default value = None)
 
-    Returns:
-        2d ndarray: Power spectral density of image
+    Returns
+    -------
+
+    
     """
     # use the square part of the matrix for spectrum calculation
     if crop:
@@ -291,19 +298,34 @@ def get_psd_stack(
     """Find the PSD estimates for a stack of images
     Passed onto get_psd
 
-    Args:
-        stack (3D ndarray): displacement in meters (num_iamges, rows, cols)
+    Parameters
+    ----------
+    stack : 3D ndarray
+        displacement in meters (num_iamges, rows, cols)
+    stack : 3D ndarray
+        displacement in meters (num_iamges, rows, cols)
+        resolution (float), spatial resolution of input data in meters
+    stack : 3D ndarray
+        displacement in meters (num_iamges, rows, cols)
         resolution (float), spatial resolution of input data in meters
         freq0 (float), reference spatial freqency in cycle / m.
-        deg (int): degree of Polynomial to fit to PSD. default = 3, cubic
-        crop (bool): crop the data into a square image with fewest non-zero pixels
-        N (int): size to crop square (defaults to size of smaller side)
+    deg : int
+        degree of Polynomial to fit to PSD. default = 3, cubic
+    crop : bool
+        crop the data into a square image with fewest non-zero pixels (Default value = True)
+    N : int
+        size to crop square (defaults to size of smaller side)
+    resolution :
+        (Default value = 60.0)
+    freq0 :
+        (Default value = 1e-4)
+    density :
+        (Default value = False)
 
-    Returns:
-        p0_hat_arr (ndarray[float]) estimates of power spectral density at ref frequency [in m^2]
-        beta_hat_list (List[Polynomial]): list of estimates of slope of loglog power profile
-        freq (1D ndarray): frequency [cycle/m]
-        psd1d_arr (ndarray)): list of power spectral density [m^2] size=(num_images, len(freq))
+    Returns
+    -------
+
+    
     """
     p0_hat_arr = []
     beta_hat_list = []
@@ -332,17 +354,22 @@ def average_psd_radial(
     density=False,
 ):
     """Calculate the radially averaged power spectrum (assumes isotropy)
-    Args:
-        psd2d (ndarray) of size (N, N) for 2D power spectral density.
-            non-square images sized (r, c) will use N = min(r, c)
-        image: (ndarray), (optional) if psd2d=None, pass original image to transform
-        resolution (float), spatial resolution of input data in meters
-    Returns:
-        freq: 1D ndarray, size (N - 1)//2, spatial frequency in radial direction
-        psd1d: ndarray of size (N - 1)//2 for power spectral density
 
-    Starting point for code:
-        https://medium.com/tangibit-studios/2d-spectrum-characterization-e288f255cc59
+    Parameters
+    ----------
+    image :
+        (ndarray), (optional) if psd2d=None, pass original image to transform (Default value = None)
+    psd2d :
+        (Default value = None)
+    resolution :
+        (Default value = 50.0)
+    density :
+        (Default value = False)
+
+    Returns
+    -------
+
+    
     """
     if psd2d is None:
         if image is None:
@@ -378,20 +405,30 @@ def average_psd_radial(
 def power_slope(freq, psd, freq0=1e-4, deg=3, verbose=False):
     """Derive the slope beta and p0 of an exponential function in loglog scale
     p = p0 * (freq/freq0)^(-beta)
-
+    
     Python translation of pslope.m (Ramon Hanssen, 2000), with added
     higher polynomials
 
-    Args:
-        freq (1D / 2D ndarray): in cycle / m
-        psd (1D / 2D ndarray): power spectral density
+    Parameters
+    ----------
+    freq : 1D / 2D ndarray
+        in cycle / m
+    psd : 1D / 2D ndarray
+        power spectral density
+    psd : 1D / 2D ndarray
+        power spectral density
         freq0 (float) reference freqency in cycle / m
-        deg (int): degree of polynomial fit to log-log plot (default = 3, cubic)
-        verbose (bool): print debug info
-    Returns:
-    p0 (float), power spectral density at reference frequency
-        (same unit as the input psd)
-    beta (float): slope of power profile in loglog scale
+    deg : int
+        degree of polynomial fit to log-log plot (default = 3, cubic)
+    freq0 :
+        (Default value = 1e-4)
+    verbose :
+        (Default value = False)
+
+    Returns
+    -------
+
+    
     """
     freq = freq.flatten()
     psd = psd.flatten()
@@ -442,18 +479,31 @@ def get_psd_blocks(
     """For one image, get radially averaged PSD from multiple blocks within image
     Crops into subsets, calls `get_psd` on each
 
-    Args:
-        data (2D ndarray) :  displacement in m.
+    Parameters
+    ----------
+    data : 2D ndarray
+        displacement in m.
+    data : 2D ndarray
+        displacement in m.
         resolution (float), spatial resolution of input data in meters
-        block_size (float): size of block side, in meters
-        block_step (float): amount to shift the block window, in m
-        freq0 (float), reference spatial freqency in cycle / m.
-        deg (int): degree of Polynomial to fit to PSD. default = 3, cubic
-    Returns:
-        p0_hat_arr (List[float]) estimates of power spectral density at ref frequency [in m^2]
-        beta_hat_list (List[float]): list of estimates of slope of power profile in loglog scale
-        freq (1D ndarray): frequency [cycle/m]
-        psd1d_arr (List[ndarray])): list of power spectral density [m^2]
+    block_size : float
+        size of block side, in meters (Default value = None)
+    block_step : float
+        amount to shift the block window, in m (Default value = None)
+    block_step : float
+        amount to shift the block window, in m
+        freq0 (float), reference spatial freqency in cycle / m. (Default value = None)
+    resolution :
+        (Default value = 60.0)
+    freq0 :
+        (Default value = 1e-4)
+    deg :
+        (Default value = 3)
+
+    Returns
+    -------
+
+    
     """
     nrow, ncol = data.shape
     if block_size is None:
@@ -493,18 +543,24 @@ def get_psd_blocks(
 def recon_power_spectral_density(p0, beta, resolution, freq0, N):
     """Reconstruct 1D power spectral density from input p0 and beta
 
-    Args:
-        p0 (float): power spectral density in m^2 at `f0` Hz
-        beta (Polynomial, float): power spectra slope in loglog scale
-            if scalare passed, assuming it single slope of loglog plot
-        resolution (float): spatial resolution of the image in meters
-        freq0 (float): reference spatial frequency in cycle / m
-        N (int): min size of the image
-    Returns:
-        f: 1D np.ndarray, spatial frequency sequence in cycle / m
-        p: 1D np.ndarray, line/polynomial power spectral density fit
-    Examples:
-        freq, psd = recon_power_spectral_density(p0, beta, resolution, freq0)
+    Parameters
+    ----------
+    p0 : float
+        power spectral density in m^2 at `f0` Hz
+    beta : Polynomial
+        power spectra slope in loglog scale
+        if scalare passed, assuming it single slope of loglog plot
+    resolution : float
+        spatial resolution of the image in meters
+    freq0 : float
+        reference spatial frequency in cycle / m
+    N :
+        
+
+    Returns
+    -------
+
+    
     """
     # frequency for x-axis after FFT
     k = fftfreq(N, d=resolution)
@@ -529,11 +585,34 @@ def recon_power_spectral_density(p0, beta, resolution, freq0, N):
 
 def fractal_dimension(beta):
     """Convert the beta slope to D, fractal dimension
-    This D2 is from Hanssen Section 4.7"""
+    This D2 is from Hanssen Section 4.7
+
+    Parameters
+    ----------
+    beta :
+        
+
+    Returns
+    -------
+
+    
+    """
     return (7.0 - beta + 1.0) / 2.0
 
 
 def debug(surf):
+    """
+
+    Parameters
+    ----------
+    surf :
+        
+
+    Returns
+    -------
+
+    
+    """
     return (
         f"min:{np.min(surf):.2g}, max:{np.max(surf):.2g}, "
         f"ptp:{np.ptp(surf):.2g}, mean:{np.mean(surf):.2g}"
@@ -546,21 +625,27 @@ def average_psd_azimuth(
 ):
     """Get 1D power spectrum averaged by angular bin (azimuthal average)
 
-    Args:
-        psd2d (ndarray): 2D power spectral density, size (N, N)
-            non-square images sized (r, c) will use N = min(r, c)
-        image (ndarray): (optional) if psd2d=None, pass original image to transform
-        dTheta (float): spacing between angle bins, in degrees. default=30.
-        r_min (float): optional, to limit the radius where the averaging takes place,
-            pass a minimum radius (in pixels)
-        r_max (float): optional, maximum radius (in pixels) where the averaging takes place
-            r_min / r_max can be used to look in an annulus
-    Returns:
-        angles: 1D ndarray, size 360 / dTheta, of angles used to average
-        psd1d: azimuthal average of each angle bin.
+    Parameters
+    ----------
+    psd2d : ndarray
+        2D power spectral density, size (N, N)
+        non-square images sized (r, c) will use N = min(r, c) (Default value = None)
+    image : ndarray
+        (optional) if psd2d=None, pass original image to transform (Default value = None)
+    dTheta : float
+        spacing between angle bins, in degrees. default=30.
+    r_min : float
+        optional, to limit the radius where the averaging takes place,
+        pass a minimum radius (in pixels) (Default value = 0)
+    r_max : float
+        optional, maximum radius (in pixels) where the averaging takes place (Default value = np.inf)
+    resolution :
+        (Default value = 60.0)
 
-    Reference:
-        https://medium.com/tangibit-studios/2d-spectrum-characterization-e288f255cc59
+    Returns
+    -------
+
+    
     """
     if psd2d is None:
         if image is None:
@@ -580,7 +665,24 @@ def average_psd_azimuth(
 
 
 def _get_theta_sectors(psd2d, dTheta, r_min=0, r_max=np.inf):
-    """Helper to make a mask of azimuthal angles of image"""
+    """Helper to make a mask of azimuthal angles of image
+
+    Parameters
+    ----------
+    psd2d :
+        
+    dTheta :
+        
+    r_min :
+        (Default value = 0)
+    r_max :
+        (Default value = np.inf)
+
+    Returns
+    -------
+
+    
+    """
     h, w = psd2d.shape
     hc, wc = h // 2, w // 2
 

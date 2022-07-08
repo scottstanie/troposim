@@ -9,9 +9,9 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
     Parameters
     ----------
     coherence : int, ndarray
-        Coherence magnitude of phase noise.
+        Coherence magnitude of phase noise. (Default value = None)
     looks : int
-        Number of looks.
+        Number of looks. (Default value = 1)
     nbins : int, optional
         Granularity of phi bins, used for PDF generation. Defaults to 200.
     rounding_threshold : float, optional
@@ -21,7 +21,8 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
 
     Returns
     -------
-    ndarray: Decorrelation phase noise. Shape is same as `coherence`
+    ndarray : Decorrelation phase noise. Shape is same as `coherence`
+        
 
     Raises
     ------
@@ -32,7 +33,6 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
     ----------
     Hanssen, 2001, Eq. 4.2.24
     (Derived by Barber, 1993, Lee et al., 1994, Joughin and Winebrenner, 1994)
-
     """
     out = np.zeros(coherence.shape)
     coh_rounded = _round_to(np.atleast_1d(coherence), rounding_threshold)
@@ -55,7 +55,7 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
 
 def phase_pdf(coherence, looks, nbins=200, phi0=0.0):
     """Compute the PDF of decorrleation phase noise for a given number of looks.
-
+    
     Uses Eq. 4.2.24 from Hanssen, 2001, using the expression derived in
     Barber (1993), Lee et al. (1994), and Joughin and Winebrenner (1994)
 
@@ -72,10 +72,8 @@ def phase_pdf(coherence, looks, nbins=200, phi0=0.0):
 
     Returns
     -------
-    phi : ndarray
-        Phase bins at which the PDF is evaluated.
-    pdf : ndarray
-        Decorrelation phase noise. Shape is same as `coherence`
+
+    
     """
     from numpy import cos, pi
     from scipy import special as sc
@@ -100,8 +98,21 @@ def phase_pdf(coherence, looks, nbins=200, phi0=0.0):
 
 def _sample_noise(phi_bins, pdf, size=1):
     """Sample decorrelation phase noise for a given pdf, using `phase_pdf`.
-
+    
     Length of phi_bins must be 1 greater than `len(pdf)`.
+
+    Parameters
+    ----------
+    phi_bins :
+        
+    pdf :
+        
+    size :
+         (Default value = 1)
+
+    Returns
+    -------
+
     """
     from scipy import stats
 
@@ -111,4 +122,17 @@ def _sample_noise(phi_bins, pdf, size=1):
 
 
 def _round_to(x, step):
+    """
+
+    Parameters
+    ----------
+    x :
+        
+    step :
+        
+
+    Returns
+    -------
+
+    """
     return step * np.round(x / step)

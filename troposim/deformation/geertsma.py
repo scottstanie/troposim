@@ -5,26 +5,27 @@ from scipy import integrate, special
 def reservoir_subsidence(D, R, deltaH, nu=0.25, r=None, as_grid=False):
     """Compute the vertical subsidence according to cylindrical reservoir (Geertsma, 1973).
 
-    Args:
-        D (float): Depth of the reservoir (m).
-        R (float): Radius of the reservoir (m).
-        deltaH (float): Change in reservoir height (m).
-        nu (float, optional): Poisson's ratio. Defaults to 0.25.
-        r (ndarray[float] optional): Radius values at which to evaluate subsidence.
-            Defaults to 100 points spaced equally between 0 and R.
-        as_grid (bool, optional): Return the subsidence as a square grid. Defaults to False.
-            If False, returns two 1d arrays
+    Parameters
+    ----------
+    D : float
+        Depth of the reservoir (m).
+    R : float
+        Radius of the reservoir (m).
+    deltaH : float
+        Change in reservoir height (m).
+    nu : float
+        Poisson's ratio. Defaults to 0.25.
+    r : ndarray[float] optional
+        Radius values at which to evaluate subsidence.
+        Defaults to 100 points spaced equally between 0 and R.
+    as_grid : bool
+        Return the subsidence as a square grid. Defaults to False.
+        If False, returns two 1d arrays
 
-    Returns:
-        Uz: vertical subsidence (m) at each radius value in `r`.
-        r: radius values which subsidence was evaluated at (in case
-            r was not specified).
-        If `as_grid` is True, returns a 2d array for each of these. Otherwise, they are 1D
+    Returns
+    -------
 
-    Uses formula 6 from:
-    References:
-        Geertsma, J. (1973). Land subsidence above compacting oil and gas
-        reservoirs. Journal of Petroleum Technology, 25(06), 734-744.
+    
     """
     # We don't need biot's coefficient if we input the DeltaH.
     # This is related to the pressure drop through DeltaH = H * c_m * DeltaP
@@ -36,6 +37,20 @@ def reservoir_subsidence(D, R, deltaH, nu=0.25, r=None, as_grid=False):
 
     # Source: https://github.com/Abakumov/MLIB (though this is wrong)
     def f_A(a, rho):
+        """
+
+        Parameters
+        ----------
+        a :
+            
+        rho :
+            
+
+        Returns
+        -------
+
+        
+        """
         return np.exp(-D * a) * special.j1(a * R) * special.j0(a * rho)
 
     if r is None:
@@ -59,6 +74,20 @@ def reservoir_subsidence(D, R, deltaH, nu=0.25, r=None, as_grid=False):
 
 
 def _make_square_grid(Uz, r):
+    """
+
+    Parameters
+    ----------
+    Uz :
+        
+    r :
+        
+
+    Returns
+    -------
+
+    
+    """
     # Uz, r = reservoir_subsidence(D, R, deltaH, nu=nu, r=r)
     n = len(r)
 
@@ -73,6 +102,26 @@ def _make_square_grid(Uz, r):
 
 
 def plot(D, R, deltaH, nu=0.25, r=None):
+    """
+
+    Parameters
+    ----------
+    D :
+        
+    R :
+        
+    deltaH :
+        
+    nu :
+        (Default value = 0.25)
+    r :
+        (Default value = None)
+
+    Returns
+    -------
+
+    
+    """
     import matplotlib.pyplot as plt
 
     Uz_square, RR = reservoir_subsidence(D, R, deltaH, nu=nu, r=r, as_grid=True)
@@ -87,6 +136,20 @@ def plot(D, R, deltaH, nu=0.25, r=None):
 
 
 def find_closest_idxs(known_array, test_array):
+    """
+
+    Parameters
+    ----------
+    known_array :
+        
+    test_array :
+        
+
+    Returns
+    -------
+
+    
+    """
     index_sorted = np.argsort(known_array)
     known_array_sorted = known_array[index_sorted]
     known_array_middles = (

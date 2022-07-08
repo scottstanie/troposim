@@ -3,16 +3,28 @@ import numpy as np
 
 def remove_ramp(z, deramp_order=1, mask=np.ma.nomask, copy=True, dtype=np.float32):
     """Estimates a linear plane through data and subtracts to flatten
-
+    
     Used to remove noise artifacts from unwrapped interferograms
 
-    Args:
-        z (ndarray): 2D array, interpreted as heights
-        deramp_order (int): degree of surface estimation
-            deramp_order = 1 removes linear ramp, deramp_order = 2 fits quadratic surface
+    Parameters
+    ----------
+    z : ndarray
+        2D array, interpreted as heights
+    deramp_order : int
+        degree of surface estimation
+        deramp_order = 1 removes linear ramp, deramp_order = 2 fits quadratic surface (Default value = 1)
+    mask :
+         (Default value = np.ma.nomask)
+    copy :
+         (Default value = True)
+    dtype :
+         (Default value = np.float32)
 
-    Returns:
-        ndarray: flattened 2D array with estimated surface removed
+    Returns
+    -------
+    ndarray
+        flattened 2D array with estimated surface removed
+
     """
     if z.ndim > 2:
         if mask.ndim > 2:
@@ -38,20 +50,26 @@ def remove_ramp(z, deramp_order=1, mask=np.ma.nomask, copy=True, dtype=np.float3
 
 def estimate_ramp(z, deramp_order):
     """Takes a 2D array an fits a linear plane to the data
-
+    
     Ignores pixels that have nan values
 
-    Args:
-        z (ndarray): 2D array, interpreted as heights
-        deramp_order (int): degree of surface estimation
-            deramp_order = 1 removes linear ramp, deramp_order = 2 fits quadratic surface
+    Parameters
+    ----------
+    z : ndarray
+        2D array, interpreted as heights
+    deramp_order : int
+        degree of surface estimation
+        deramp_order = 1 removes linear ramp, deramp_order = 2 fits quadratic surface
 
-    Returns:
-        ndarray: the estimated coefficients of the surface
-            For deramp_order = 1, it will be 3 numbers, a, b, c from
-                 ax + by + c = z
-            For deramp_order = 2, it will be 6:
-                f + ax + by + cxy + dx^2 + ey^2
+    Returns
+    -------
+    ndarray
+        the estimated coefficients of the surface
+        For deramp_order = 1, it will be 3 numbers, a, b, c from
+        ax + by + c = z
+        For deramp_order = 2, it will be 6:
+        f + ax + by + cxy + dx^2 + ey^2
+
     """
     if deramp_order > 2:
         raise ValueError("Order only implemented for 1 and 2")
@@ -84,11 +102,22 @@ def estimate_ramp(z, deramp_order):
 
 def matrix_indices(shape, flatten=True):
     """Returns a pair of vectors for all indices of a 2D array
-
+    
     Convenience function to help remembed mgrid syntax
-
+    
     Example:
-        >>> a = np.arange(12).reshape((4, 3))
+
+    Parameters
+    ----------
+    shape :
+        
+    flatten :
+         (Default value = True)
+
+    Returns
+    -------
+
+    >>> a = np.arange(12).reshape((4, 3))
         >>> print(a)
         [[ 0  1  2]
          [ 3  4  5]

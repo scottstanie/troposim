@@ -11,32 +11,35 @@ def simulate(dem, K_params={}, h0_params={}, alpha_params={}):
     Uses the power law scaling from Bekaert, 2015:
         `K * (h0 - h) ** alpha`
 
-    Args:
-        dem (ndarray): DEM heights (in meters)
-        K_params (dict): parameters for sampling the atmospheric constant:
-            options:
-                'mean' (default = 0)
-                'sigma': (default = 5e-6)
-                'shape': (default = (1,))
-            K is sampled from a laplacian distribution
-            units: radians / meters^alpha
-        h0_params (float, optional): top of atmosphere height.
-            options:
-                'mean' (default = 7000)
-                'sigma': (default = 100)
-                'shape': (default = (1,))
-        alpha_params: parameters for sampling the power law scaling:
-            options:
-                'mean' (default = 1.4)
-                'sigma': (default = 0.1)
-                'shape': (default = (1,))
+    Parameters
+    ----------
+    dem : ndarray
+        DEM heights (in meters)
+    K_params : dict
+        parameters for sampling the atmospheric constant:
+        options:
+        'mean' (default = 0)
+        'sigma': (default = 5e-6)
+        'shape': (default = (1,))
+        K is sampled from a laplacian distribution
+        units: radians / meters^alpha
+    h0_params : float
+        top of atmosphere height.
+        options:
+        'mean' (default = 7000)
+        'sigma': (default = 100)
+        'shape': (default = (1,))
+    alpha_params :
+        parameters for sampling the power law scaling:
+        options:
+        'mean' (default = 1.4)
+        'sigma': (default = 0.1)
+        'shape': (default = (1,))
 
-    Raises:
-        ValueError: if h0 is not larger than all DEM heights
+    Returns
+    -------
 
-    Returns:
-        ndarray: stratified delay maps (in cm)
-        output shape: (max(len(K), len(h0), len(alpha)), dem_rows, dem_cols)
+    
     """
     K = sample_K(**K_params)
     alpha = sample_alpha(**alpha_params)
@@ -47,19 +50,24 @@ def simulate(dem, K_params={}, h0_params={}, alpha_params={}):
 def make_stratified_delay(dem, K, h0=7000, alpha=1.4, zero_mean=True):
     """Create a stratified delay map from a DEM
 
-    Args:
-        dem (ndarray): DEM heights (in meters)
-        K (float, ndarray): atmospheric constant: `K (h0 - h) ** alpha`
-            units: radians / meters^alpha
-        h0 (float, optional): top of atmosphere height. Defaults to 7000.
-        alpha (float, optional): power law scaling. Defaults to 1.4.
+    Parameters
+    ----------
+    dem : ndarray
+        DEM heights (in meters)
+    K : float
+        atmospheric constant: `K (h0 - h) ** alpha`
+        units: radians / meters^alpha
+    h0 : float
+        top of atmosphere height. Defaults to 7000.
+    alpha : float
+        power law scaling. Defaults to 1.4.
+    zero_mean :
+        (Default value = True)
 
-    Raises:
-        ValueError: if h0 is not larger than all DEM heights
+    Returns
+    -------
 
-    Returns:
-        ndarray: stratified delay map (in cm)
-        output shape: (max(len(K), len(h0), len(alpha)), dem_rows, dem_cols)
+    
     """
     K, h0, alpha = _get_param_sizes(K, h0, alpha)
 
@@ -76,21 +84,88 @@ def make_stratified_delay(dem, K, h0=7000, alpha=1.4, zero_mean=True):
 
 
 def sample_K(mean=0.0, sigma=5e-6, shape=(1,)):
-    """Sample a random K value from a normal distribution"""
+    """Sample a random K value from a normal distribution
+
+    Parameters
+    ----------
+    mean :
+        (Default value = 0.0)
+    sigma :
+        (Default value = 5e-6)
+    shape :
+        (Default value = (1)
+    ) :
+        
+
+    Returns
+    -------
+
+    
+    """
     return np.random.laplace(loc=mean, scale=sigma, size=shape)
 
 
 def sample_alpha(mean=1.4, sigma=0.1, shape=(1,)):
-    """Sample a random alpha value from a normal distribution"""
+    """Sample a random alpha value from a normal distribution
+
+    Parameters
+    ----------
+    mean :
+        (Default value = 1.4)
+    sigma :
+        (Default value = 0.1)
+    shape :
+        (Default value = (1)
+    ) :
+        
+
+    Returns
+    -------
+
+    
+    """
     return np.random.normal(loc=mean, scale=sigma, size=shape)
 
 
 def sample_h0(mean=7000, sigma=100, shape=(1,)):
-    """Sample a random h0 value from a normal distribution"""
+    """Sample a random h0 value from a normal distribution
+
+    Parameters
+    ----------
+    mean :
+        (Default value = 7000)
+    sigma :
+        (Default value = 100)
+    shape :
+        (Default value = (1)
+    ) :
+        
+
+    Returns
+    -------
+
+    
+    """
     return np.random.normal(loc=mean, scale=sigma, size=shape)
 
 
 def _get_param_sizes(K, h0, alpha):
+    """
+
+    Parameters
+    ----------
+    K :
+        
+    h0 :
+        
+    alpha :
+        
+
+    Returns
+    -------
+
+    
+    """
     if np.isscalar(K):
         K = np.array(K).reshape((1, 1, 1))
     else:

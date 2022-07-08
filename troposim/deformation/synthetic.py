@@ -14,18 +14,28 @@ def gaussian(
 ):
     """Create a gaussian bowl of given shape and width
 
-    Args:
-        shape (tuple[int]): (rows, cols)
-        sigma (float): std dev of gaussian
-        row (int, optional): center of blob. Defaults to None.
-        col (int, optional): center col of blob. Defaults to None.
-        normalize (bool, optional): Normalize the amplitude peak to 1. 
-            Defaults to False.
-        amp (float, optional): peak height of gaussian. Defaults to None.
-        noise_sigma (float, optional): Std. dev of random gaussian noise added to image.
+    Parameters
+    ----------
+    shape : tuple[int]
+        (rows, cols)
+    sigma : float
+        std dev of gaussian
+    row : int
+        center of blob. Defaults to None.
+    col : int
+        center col of blob. Defaults to None.
+    normalize : bool
+        Normalize the amplitude peak to 1.
+        Defaults to False.
+    amp : float
+        peak height of gaussian. Defaults to None.
+    noise_sigma : float
+        Std. dev of random gaussian noise added to image. (Default value = 0.0)
 
-    Returns:
-        ndarray: grid with one gaussian blob
+    Returns
+    -------
+
+    
     """
     d = delta(shape, row, col)
     out = ndi.gaussian_filter(d, sigma, mode="constant") * sigma ** 2
@@ -36,7 +46,22 @@ def gaussian(
 
 
 def delta(shape, row=None, col=None):
-    """Create a spike in the middle of an image"""
+    """Create a spike in the middle of an image
+
+    Parameters
+    ----------
+    shape :
+        
+    row :
+        (Default value = None)
+    col :
+        (Default value = None)
+
+    Returns
+    -------
+
+    
+    """
     delta = np.zeros(shape)
     rows, cols = shape
     if col is None:
@@ -48,7 +73,18 @@ def delta(shape, row=None, col=None):
 
 
 def _rotation_matrix(theta):
-    """CCW rotation matrix by `theta` degrees"""
+    """CCW rotation matrix by `theta` degrees
+
+    Parameters
+    ----------
+    theta :
+        
+
+    Returns
+    -------
+
+    
+    """
     theta_rad = np.deg2rad(theta)
     return np.array(
         [
@@ -59,6 +95,22 @@ def _rotation_matrix(theta):
 
 
 def _normalize_gaussian(out, normalize=False, amp=None):
+    """
+
+    Parameters
+    ----------
+    out :
+        
+    normalize :
+        (Default value = False)
+    amp :
+        (Default value = None)
+
+    Returns
+    -------
+
+    
+    """
     if normalize or amp is not None:
         out /= out.max()
     if amp is not None:
@@ -67,14 +119,46 @@ def _normalize_gaussian(out, normalize=False, amp=None):
 
 
 def _calc_ab(sigma, ecc):
-    """Calculate semi-major/semi-minor axis length from `sigma` and `ecc`entricity"""
+    """Calculate semi-major/semi-minor axis length from `sigma` and `ecc`entricity
+
+    Parameters
+    ----------
+    sigma :
+        
+    ecc :
+        
+
+    Returns
+    -------
+
+    
+    """
     a = np.sqrt(sigma ** 2 / (1 - ecc))
     b = a * (1 - ecc)
     return a, b
 
 
 def _xy_grid(shape, xmin=None, xmax=None, ymin=None, ymax=None):
-    """Make an xy grid centered at 0,0 in the middle"""
+    """Make an xy grid centered at 0,0 in the middle
+
+    Parameters
+    ----------
+    shape :
+        
+    xmin :
+        (Default value = None)
+    xmax :
+        (Default value = None)
+    ymin :
+        (Default value = None)
+    ymax :
+        (Default value = None)
+
+    Returns
+    -------
+
+    
+    """
     if xmin is None or xmax is None:
         xmin, xmax = (1, shape[1])
     if ymin is None or ymax is None:
@@ -99,23 +183,36 @@ def gaussian_ellipse(
 ):
     """Make an ellipse using multivariate gaussian
 
-    Args:
-        shape (tuple[int, int]): size of grid
-        a: semi major axis length
-        b: semi minor axis length
-        sigma: std dev of gaussian, if it were circular
-        ecc: from 0 to 1, alternative to (a, b) specification is (sigma, ecc)
-            ecc = 1 - (b/a), and area = pi*sigma**2 = pi*a*b
-        row: row of center
-        col: col of center
-        theta: degrees of rotation (CCW)
-        normalize (bool): if true, set max value to 1
-        amp (float): value of peak of gaussian
-        noise_sigma (float): optional, adds gaussian noise to blob
+    Parameters
+    ----------
+    shape : tuple[int
+        size of grid
+    a :
+        semi major axis length (Default value = None)
+    b :
+        semi minor axis length (Default value = None)
+    sigma :
+        std dev of gaussian, if it were circular (Default value = None)
+    ecc :
+        from 0 to 1, alternative to (a, b) specification is (sigma, ecc)
+        ecc = 1 - (b/a), and area = pi*sigma**2 = pi*a*b (Default value = None)
+    row :
+        row of center (Default value = None)
+    col :
+        col of center (Default value = None)
+    theta :
+        degrees of rotation (CCW) (Default value = 0)
+    normalize : bool
+        if true, set max value to 1 (Default value = False)
+    amp : float
+        value of peak of gaussian (Default value = None)
+    noise_sigma : float
+        optional, adds gaussian noise to blob (Default value = 0)
 
-    Returns:
-        ndarray: grid with one multivariate gaussian heights
+    Returns
+    -------
 
+    
     """
     from scipy.stats import multivariate_normal
 
@@ -144,7 +241,20 @@ def gaussian_ellipse(
 
 
 def valley(shape, rotate=0):
-    """Make a valley in image center (curvature only in 1 direction)"""
+    """Make a valley in image center (curvature only in 1 direction)
+
+    Parameters
+    ----------
+    shape :
+        
+    rotate :
+        (Default value = 0)
+
+    Returns
+    -------
+
+    
+    """
     from skimage import transform
 
     rows, cols = shape
@@ -155,14 +265,38 @@ def valley(shape, rotate=0):
 
 
 def bowl(shape):
-    """Simple quadratic bowl"""
+    """Simple quadratic bowl
+
+    Parameters
+    ----------
+    shape :
+        
+
+    Returns
+    -------
+
+    
+    """
     xx, yy = _xy_grid(shape)
     z = xx ** 2 + yy ** 2
     return z / np.max(z)
 
 
 def quadratic(shape, coeffs):
-    """2D quadratic function"""
+    """2D quadratic function
+
+    Parameters
+    ----------
+    shape :
+        
+    coeffs :
+        
+
+    Returns
+    -------
+
+    
+    """
     nrows, ncols = shape
     row_block, col_block = np.mgrid[0:nrows, 0:ncols]
     yy, xx = row_block.flatten(), col_block.flatten()
@@ -171,7 +305,24 @@ def quadratic(shape, coeffs):
 
 
 def stack(N=501, max_amp=3, plot=False, cmap="jet"):
-    """Simpler composite of 3 areas of blob of different sizes"""
+    """Simpler composite of 3 areas of blob of different sizes
+
+    Parameters
+    ----------
+    N :
+        (Default value = 501)
+    max_amp :
+        (Default value = 3)
+    plot :
+        (Default value = False)
+    cmap :
+        (Default value = "jet")
+
+    Returns
+    -------
+
+    
+    """
     shape = (N, N)
     b1 = gaussian(shape, 60, N // 3, 2 * N // 3)
 

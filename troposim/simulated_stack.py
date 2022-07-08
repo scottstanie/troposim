@@ -25,6 +25,46 @@ def generate_stacks(
     stratified_kwargs={},
     deformation_kwargs={},
 ):
+    """
+
+    Parameters
+    ----------
+    demfile :
+        
+    outfile :
+        (Default value = "simulated_stack.h5")
+    dsets :
+        (Default value = ["defo")
+    "stratified" :
+        
+    "turbulence" :
+        
+    "decorrelation"] :
+        
+    num_days :
+        (Default value = 9)
+    num_defos :
+        (Default value = 120)
+    defo_shape :
+        (Default value = (200)
+    200) :
+        
+    add_day1_turbulence :
+        (Default value = False)
+    turbulence_kwargs :
+        (Default value = {})
+    # p0 :
+        (Default value = 1e-2)
+    stratified_kwargs :
+        (Default value = {})
+    deformation_kwargs :
+        (Default value = {})
+
+    Returns
+    -------
+
+    
+    """
     # SRTM DEM pixel spacing, in degrees
     res_30_degrees = 0.000277777777
 
@@ -167,21 +207,36 @@ def data_loader(
 ):
     """Create a generator that yields chunks of data from the noise and defo files.
 
-    Args:
-        noise_file (str): Name of the noise file.
-        defo_file (str): Name of the defo file.
-        dem_file (str): Name of the DEM file.
-        chunk_size (tuple, optional): Spatial size of chuns to yield. Defaults to (48, 48).
-        normalize (bool, optional): Whether to normalize the data to [-1, 1].
-            Defaults to True.
-        load (bool, optional): Whether to load the data into memory. Defaults to True.
-        no_noise (bool, optional): Whether to skip loading the noise file. Defaults to False.
+    Parameters
+    ----------
+    noise_file : str
+        Name of the noise file.
+    defo_file : str
+        Name of the defo file.
+    dem_file : str
+        Name of the DEM file.
+    chunk_size : tuple
+        Spatial size of chuns to yield. Defaults to (48, 48).
+    normalize : bool
+        Whether to normalize the data to [-1, 1].
+        Defaults to True.
+    load : bool
+        Whether to load the data into memory. Defaults to True.
+    no_noise : bool
+        Whether to skip loading the noise file. Defaults to False.
+    sim_file :
+        
+    48) :
+        
+    looks :
+        (Default value = (1)
+    1) :
+        
 
-    Yields:
-        X, y, dem_chunk (tuple[ndarray, ndarray, ndarray]):
-            X is the 3D noisy data
-            y is the 2d cumulative target deformation data.
-            dem_chunk is the portion of the DEM that is covered by the chunk.
+    Returns
+    -------
+
+    
     """
     hf = h5py.File(sim_file, "r")
     full_shape = hf["defo"].shape
@@ -272,6 +327,44 @@ def load_all_data(
     min_y=0.7,  # cm, unnormalized
     max_y=5,  # cm, unnormalized
 ):
+    """
+
+    Parameters
+    ----------
+    sim_file_glob :
+        (Default value = None)
+    dem_file :
+        (Default value = None)
+    sim_file_list :
+        (Default value = None)
+    chunk_size :
+        (Default value = (48)
+    48) :
+        
+    looks :
+        (Default value = (1)
+    1) :
+        
+    normalize :
+        (Default value = False)
+    no_noise :
+        (Default value = False)
+    load :
+        (Default value = True)
+    min_y :
+        (Default value = 0.7)
+    # cm :
+        
+    unnormalizedmax_y :
+        (Default value = 5)
+    unnormalized :
+        
+
+    Returns
+    -------
+
+    
+    """
     if sim_file_list is None:
         sim_file_list = glob.glob(sim_file_glob)
     X_all = None
@@ -310,6 +403,26 @@ def load_all_data(
 
 
 def plot_data(X, y, dem, vm=None, cmap="RdBu"):
+    """
+
+    Parameters
+    ----------
+    X :
+        
+    y :
+        
+    dem :
+        
+    vm :
+        (Default value = None)
+    cmap :
+        (Default value = "RdBu")
+
+    Returns
+    -------
+
+    
+    """
     import matplotlib.pyplot as plt
 
     vm = vm or np.max(np.abs(X))
@@ -342,24 +455,92 @@ def plot_data(X, y, dem, vm=None, cmap="RdBu"):
 
 
 def power(x):
+    """
+
+    Parameters
+    ----------
+    x :
+        
+
+    Returns
+    -------
+
+    
+    """
     return np.mean(x**2)
 
 
 def load_noise(hf):
+    """
+
+    Parameters
+    ----------
+    hf :
+        
+
+    Returns
+    -------
+
+    
+    """
     return hf["turbulence"][()] + hf["stratified"][()] + hf["decorrelation"][()]
 
 
 def snr(hf):
+    """
+
+    Parameters
+    ----------
+    hf :
+        
+
+    Returns
+    -------
+
+    
+    """
     return power(hf["defo"][()]) / power(load_noise(hf))
 
 
 def peak_ratio(hf, axis=None):
+    """
+
+    Parameters
+    ----------
+    hf :
+        
+    axis :
+        (Default value = None)
+
+    Returns
+    -------
+
+    
+    """
     defo_max = np.max(np.abs(hf["defo"][()]), axis=axis)
     noise_max = np.max(np.abs(load_noise(hf)), axis=axis)
     return defo_max / noise_max
 
 
 def get_stack_metrics(glob_str, func, *args, **kwargs):
+    """
+
+    Parameters
+    ----------
+    glob_str :
+        
+    func :
+        
+    *args :
+        
+    **kwargs :
+        
+
+    Returns
+    -------
+
+    
+    """
     file_list = glob.glob(glob_str)
     metrics = []
     for f in file_list:
@@ -369,38 +550,124 @@ def get_stack_metrics(glob_str, func, *args, **kwargs):
 
 
 def get_snrs(glob_str, func=snr):
+    """
+
+    Parameters
+    ----------
+    glob_str :
+        
+    func :
+        (Default value = snr)
+
+    Returns
+    -------
+
+    
+    """
     return get_stack_metrics(glob_str, func)
 
 
 def get_peaks(glob_str, func=peak_ratio):
+    """
+
+    Parameters
+    ----------
+    glob_str :
+        
+    func :
+        (Default value = peak_ratio)
+
+    Returns
+    -------
+
+    
+    """
     return get_stack_metrics(glob_str, func)
 
 
 class MeanMaxScaler:
+    """ """
     def __init__(self):
         pass
 
     def fit(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         self.mean_ = np.average(X)
         # self.scale_ = np.max(np.abs(X))
         self.scale_ = np.max(np.abs(X - self.mean_))  # check with Scott on this
         return self
 
     def transform(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         return (X - self.mean_) / self.scale_
 
     def inverse_transform(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         return X * self.scale_ + self.mean_
 
 
 class LogMeanScaler:
     """Can work well to normalize skewed data, I tried it but no huge improvement at least
-    on very noisy data."""
+    on very noisy data.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
+    
+    """
 
     def __init__(self):
         pass
 
     def fit(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         self.shift_ = (
             0 if np.min(X) >= 0 else -np.min(X)
         ) + 0.0001  # log10(0) is undefined so slight shift
@@ -408,19 +675,56 @@ class LogMeanScaler:
         return self
 
     def transform(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         return np.log(X + self.shift_) - self.mean_
 
     def inverse_transform(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         return np.exp(X + self.mean_) - self.shift_
 
 
 class Scaler:
+    """ """
     def __init__(self, scale_percentile=95):
         self.mean_, self.scale_ = None, None
         self.dem_mean_, self.dem_scale_ = None, None
         self.scale_percentile = scale_percentile
 
     def fit(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         # Divide into dem/timeseries
         dems, timeseries = self._unstack_dem_timeseries(X)
 
@@ -437,6 +741,18 @@ class Scaler:
         return self
 
     def transform(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         dems, timeseries = self._unstack_dem_timeseries(X)
 
         if dems is not None:
@@ -449,6 +765,18 @@ class Scaler:
             return (timeseries - self.mean_) / self.scale_
 
     def inverse_transform(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         dems, timeseries = self._unstack_dem_timeseries(X)
 
         if dems is not None:
@@ -461,6 +789,18 @@ class Scaler:
             return timeseries * self.scale_ + self.mean_
 
     def _unstack_dem_timeseries(self, X):
+        """
+
+        Parameters
+        ----------
+        X :
+            
+
+        Returns
+        -------
+
+        
+        """
         layer0 = X[:, :1]
         other_layers = X[:, 1:]
         # The y targets will be shape (batch, 1, rows, cols)
@@ -475,9 +815,24 @@ class Scaler:
         return dems, timeseries
 
     def _stack_dem_timeseries(self, dems, timeseries):
+        """
+
+        Parameters
+        ----------
+        dems :
+            
+        timeseries :
+            
+
+        Returns
+        -------
+
+        
+        """
         return np.concatenate((dems, timeseries), axis=1)
 
     def asdict(self):
+        """ """
         d = {"mean": self.mean_, "scale": self.scale_}
         if self.dem_mean_ is not None:
             d["dem_mean"] = self.dem_mean_
@@ -486,6 +841,24 @@ class Scaler:
 
 
 def plot_model_filters(model, layer_num=-1, cmap="plasma", in_idx=0):
+    """
+
+    Parameters
+    ----------
+    model :
+        
+    layer_num :
+        (Default value = -1)
+    cmap :
+        (Default value = "plasma")
+    in_idx :
+        (Default value = 0)
+
+    Returns
+    -------
+
+    
+    """
     import matplotlib.pyplot as plt
 
     weights = model.get_weights()[layer_num]
@@ -507,6 +880,24 @@ def plot_model_filters(model, layer_num=-1, cmap="plasma", in_idx=0):
 def save_predictions_as_tifs(
     arr, ds_file, idxs, outfile_template="{inp}_predicted_{d1}_{d2}.tif"
 ):
+    """
+
+    Parameters
+    ----------
+    arr :
+        
+    ds_file :
+        
+    idxs :
+        
+    outfile_template :
+        (Default value = "{inp}_predicted_{d1}_{d2}.tif")
+
+    Returns
+    -------
+
+    
+    """
     import xarray as xr
     from apertools import sario
 
