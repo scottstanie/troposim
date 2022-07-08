@@ -1,8 +1,9 @@
-from datetime import date, timedelta
 from dataclasses import dataclass
-from typing import Tuple
-import numpy as np
+from datetime import date, timedelta
 from itertools import combinations
+from typing import Tuple
+
+import numpy as np
 
 from . import turbulence, utils
 

@@ -1,5 +1,4 @@
 """Module for simple synthetic deformations, not following any real physical model"""
-
 import numpy as np
 import scipy.ndimage as ndi
 
