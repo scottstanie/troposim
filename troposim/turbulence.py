@@ -5,11 +5,12 @@
 # which was a Python translation in MintPy of the matlab scripts written by
 # Ramon Hanssen, May 2000, available in the following website:
 #     http://doris.tudelft.nl/software/insarfractal.tar.gz
-from tqdm import tqdm
 import numpy as np
-from scipy import ndimage
+from numpy.fft import fft2, fftfreq, fftshift, ifft2
 from numpy.polynomial.polynomial import Polynomial, polyval
-from numpy.fft import fft2, ifft2, fftshift, fftfreq
+from scipy import ndimage
+from tqdm import tqdm
+
 from . import utils
 
 RNG = np.random.default_rng()

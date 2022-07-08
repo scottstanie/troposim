@@ -2,15 +2,8 @@
 import numpy as np
 from tqdm import tqdm
 
-try:
-    from scipy import special as sc
-    from scipy import stats
-except ImportError:
-    print("scipy not installed; needed for simulating decorrelation")
-    raise
 
-
-def simulate(coherence, looks, nbins=200, rounding_threshold=0.05):
+def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
     """Simulate decorrelation noise from a given coherence.
 
     Parameters
@@ -30,9 +23,22 @@ def simulate(coherence, looks, nbins=200, rounding_threshold=0.05):
     -------
     ndarray: Decorrelation phase noise. Shape is same as `coherence`
 
+    Raises
+    ------
+    ValueError
+        If `coherence` is not a scalar or array.
+
+    References
+    ----------
+    Hanssen, 2001, Eq. 4.2.24
+    (Derived by Barber, 1993, Lee et al., 1994, Joughin and Winebrenner, 1994)
+
     """
     out = np.zeros(coherence.shape)
     coh_rounded = _round_to(np.atleast_1d(coherence), rounding_threshold)
+    if np.any(coh_rounded < 0) or np.any(coh_rounded > 1):
+        raise ValueError("Coherence must be between 0 and 1")
+
     coh_rounded = np.clip(coh_rounded, 0.01, 0.99)
     looks = np.clip(looks, 1, 100)
 
@@ -72,6 +78,7 @@ def phase_pdf(coherence, looks, nbins=200, phi0=0.0):
         Decorrelation phase noise. Shape is same as `coherence`
     """
     from numpy import cos, pi
+    from scipy import special as sc
 
     coherence = np.atleast_1d(coherence)
     phi = np.linspace(-pi, pi, nbins)
@@ -94,7 +101,10 @@ def phase_pdf(coherence, looks, nbins=200, phi0=0.0):
 def _sample_noise(phi_bins, pdf, size=1):
     """Sample decorrelation phase noise for a given pdf, using `phase_pdf`.
 
-    Length of phi_bins must be 1 greater than `len(pdf)`."""
+    Length of phi_bins must be 1 greater than `len(pdf)`.
+    """
+    from scipy import stats
+
     # phi, pdf = phase_pdf(coherence, looks, phi0, nbins)
     dist = stats.rv_histogram((pdf.ravel(), phi_bins))
     return dist.rvs(size=size)
