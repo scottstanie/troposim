@@ -255,3 +255,113 @@ def rms_noise_vs_dist(image, resolution, crop=True):
     bins = r[hc, wc:] * resolution  # for the actual radial distances in image
     assert len(bins) == len(rms_noise)
     return bins, rms_noise
+
+
+def take_looks(arr, row_looks, col_looks, separate_complex=False, **kwargs):
+    """Downsample a numpy matrix by summing blocks of (row_looks, col_looks)
+
+    Cuts off values if the size isn't divisible by num looks
+
+    NOTE: For complex data, looks on the magnitude are done separately
+    from looks on the phase
+
+    Args:
+        arr (ndarray) 2D array of an image
+        row_looks (int) the reduction rate in row direction
+        col_looks (int) the reduction rate in col direction
+        separate_complex (bool): take looks on magnitude and phase separately
+            Better to preserve the look of the magnitude
+
+    Returns:
+        ndarray, size = ceil(rows / row_looks, cols / col_looks)
+    """
+    if row_looks == 1 and col_looks == 1:
+        return arr
+    if arr.ndim == 3:
+        return np.stack(
+            [
+                take_looks(
+                    a, row_looks, col_looks, separate_complex=separate_complex, **kwargs
+                )
+                for a in arr
+            ]
+        )
+    if np.iscomplexobj(arr) and separate_complex:
+        mag_looked = take_looks(np.abs(arr), row_looks, col_looks)
+        phase_looked = take_looks(np.angle(arr), row_looks, col_looks)
+        return mag_looked * np.exp(1j * phase_looked)
+
+    rows, cols = arr.shape
+    new_rows = rows // row_looks
+    new_cols = cols // col_looks
+
+    row_cutoff = rows % row_looks
+    col_cutoff = cols % col_looks
+
+    if row_cutoff != 0:
+        arr = arr[:-row_cutoff, :]
+    if col_cutoff != 0:
+        arr = arr[:, :-col_cutoff]
+    # For taking the mean, treat integers as floats
+    if np.issubdtype(arr.dtype, np.integer):
+        arr = arr.astype("float")
+
+    return np.mean(
+        np.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
+    )
+
+
+
+def block_iterator(arr_shape, block_shape, overlaps=(0, 0), start_offsets=(0, 0)):
+    """Iterator to get indexes for accessing blocks of a raster
+
+    Args:
+        arr_shape = (num_rows, num_cols), full size of array to access
+        block_shape = (height, width), size of accessing blocks
+        overlaps = (row_overlap, col_overlap), number of pixels to re-include
+            after sliding the block (default (0, 0))
+        start_offset = (row_offset, col_offset) starting location (default (0,0))
+    Yields:
+        iterator: ((row_start, row_end), (col_start, col_end))
+
+    Notes:
+        If the block_shape/overlaps don't evenly divide the full arr_shape,
+        It will return the edges as smaller blocks, rather than skip them
+
+    Examples:
+    >>> list(block_iterator((180, 250), (100, 100)))
+    [((0, 100), (0, 100)), ((0, 100), (100, 200)), ((0, 100), (200, 250)), \
+((100, 180), (0, 100)), ((100, 180), (100, 200)), ((100, 180), (200, 250))]
+    >>> list(block_iterator((180, 250), (100, 100), overlaps=(10, 10)))
+    [((0, 100), (0, 100)), ((0, 100), (90, 190)), ((0, 100), (180, 250)), \
+((90, 180), (0, 100)), ((90, 180), (90, 190)), ((90, 180), (180, 250))]
+    """
+    rows, cols = arr_shape
+    row_off, col_off = start_offsets
+    row_overlap, col_overlap = overlaps
+    height, width = block_shape
+
+    if height is None:
+        height = rows
+    if width is None:
+        width = cols
+
+    # Check we're not moving backwards with the overlap:
+    if row_overlap >= height:
+        raise ValueError(f"{row_overlap = } must be less than {height = }")
+    if col_overlap >= width:
+        raise ValueError(f"{col_overlap = } must be less than {width = }")
+    while row_off < rows:
+        while col_off < cols:
+            row_end = min(row_off + height, rows)  # Dont yield something OOB
+            col_end = min(col_off + width, cols)
+            yield ((row_off, row_end), (col_off, col_end))
+
+            col_off += width
+            if col_off < cols:  # dont bring back if already at edge
+                col_off -= col_overlap
+
+        row_off += height
+        if row_off < rows:
+            row_off -= row_overlap
+        col_off = 0

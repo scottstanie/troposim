@@ -1,14 +1,15 @@
 import glob
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+import h5py
 import numpy as np
 import rasterio as rio
-import h5py
-
-from apertools import decorr, constants, utils
 
 from troposim.deformation import okada
-from . import turbulence, stratified, deformation
 
+from . import decorrelation, deformation, stratified, turbulence, utils
+
+SENTINEL_WAVELENGTH = 5.5465763  # cm
 
 # TODO: utils.record_params_as_yaml
 # TODO: downsample as data augmentation
@@ -58,23 +59,24 @@ def generate_stacks(
     # a random function to spatially vary the coherence.
     looks = 50
     coh = np.clip(0.5 + 100 * turbulence.simulate(shape=shape), 0, 1)
-    cohphase = []
+    coh = np.tile(coh, (num_days, 1, 1))
+    cohphase = decorrelation.simulate(coh, looks) * PHASE_TO_CM_S1
     # cohphase = np.zeros((num_days, shape[0], shape[1]), dtype=np.float32)
     # for i in range(num_days):
     #     cohphase[i] = decorr.coherence2decorrelation_phase(coh, looks)
     #     cohphase[i] *= constants.PHASE_TO_CM_S1
-    with ProcessPoolExecutor(max_workers=num_days) as executor:
-        futures = [
-            executor.submit(
-                decorr.coherence2decorrelation_phase,
-                coh,
-                looks,
-            )
-            for _ in range(num_days)
-        ]
-        for future in as_completed(futures):
-            cohphase.append(future.result() * constants.PHASE_TO_CM_S1)
-    cohphase = np.array(cohphase)
+    # with ProcessPoolExecutor(max_workers=num_days) as executor:
+    #     futures = [
+    #         executor.submit(
+    #             decorrelation.simulate
+    #             coh,
+    #             looks,
+    #         )
+    #         for _ in range(num_days)
+    #     ]
+    #     for future in as_completed(futures):
+    #         cohphase.append(future.result() * PHASE_TO_CM_S1)
+    # cohphase = np.array(cohphase)
     print(f"Cohphase (min, max): {cohphase.min(), cohphase.max()}")
 
     # noise_total = strat + turb + cohphase
@@ -148,7 +150,7 @@ def _get_random_los():
     """Picks a random LOS, similar to Sentinel-1 range"""
     north = 0.1
     up = -1 * np.random.uniform(0.5, 0.85)
-    east = np.sqrt(1 - up ** 2 - north ** 2)
+    east = np.sqrt(1 - up**2 - north**2)
     # sometimes ascending pointing east, sometimes descending pointing west
     east *= np.random.choice([-1, 1])
     return [east, north, up]
@@ -340,7 +342,7 @@ def plot_data(X, y, dem, vm=None, cmap="RdBu"):
 
 
 def power(x):
-    return np.mean(x ** 2)
+    return np.mean(x**2)
 
 
 def load_noise(hf):
