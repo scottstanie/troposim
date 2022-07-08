@@ -86,18 +86,22 @@ def integral_image(image):
     The integral image contains the sum of all elements above and to the
     left of it, i.e.:
 
-    Source: skimage.transform
-    ----------
-    image : ndarray
-        Input image.
+    .. math::
+       S[m, n] = \sum_{i \leq m} \sum_{j \leq n} X[i, j]
 
     Parameters
     ----------
     image : ndarray
+        Input image.
 
     Returns
     -------
     S : ndarray
+        Summed area table, same size as `image`
+
+    Source
+    ------
+    skimage.transform module
 
     References
     ----------

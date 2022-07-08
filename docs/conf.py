@@ -155,6 +155,9 @@ pygments_style = "sphinx"
 
 
 # -- Options for HTML output -------------------------------------------------
+# Use order that functions are defined in the source code
+#  https://stackoverflow.com/questions/9770756/sphinx-list-of-functions-in-a-module
+autodoc_member_order = 'bysource'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.

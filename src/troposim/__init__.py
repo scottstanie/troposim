@@ -9,3 +9,6 @@ except DistributionNotFound:
     __version__ = "unknown"
 finally:
     del get_distribution, DistributionNotFound
+
+# Most used modules should get auto-import
+from . import turbulence
