@@ -19,12 +19,13 @@ def gaussian(
         sigma (float): std dev of gaussian
         row (int, optional): center of blob. Defaults to None.
         col (int, optional): center col of blob. Defaults to None.
-        normalize (bool, optional): _description_. Defaults to False.
+        normalize (bool, optional): Normalize the amplitude peak to 1. 
+            Defaults to False.
         amp (float, optional): peak height of gaussian. Defaults to None.
         noise_sigma (float, optional): Std. dev of random gaussian noise added to image.
 
     Returns:
-        _type_: _description_
+        ndarray: grid with one gaussian blob
     """
     d = delta(shape, row, col)
     out = ndi.gaussian_filter(d, sigma, mode="constant") * sigma ** 2

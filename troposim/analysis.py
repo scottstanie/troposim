@@ -68,7 +68,7 @@ def get_all_1d_psd_curves(
 ):
     """Get all 1D radially averaged power spectrum curves averaged for a region
 
-    Inputs:
+    Args:
         avg_ifgs (xr.DataArray): average interferograms
         resolution (float): spatial resolution of input data in meters
         min_date (datetime): minimum date to include in the analysis

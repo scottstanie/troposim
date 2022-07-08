@@ -36,7 +36,7 @@ def simulate(
     beta = 2.0 for middle scale turbulence
     beta = 1.3 for small scale turbulence
 
-    Inputs:
+    Args:
         shape: Tuple[float]: (rows, cols), or (num_images, rows, cols) of output
             If passing 3D shape, will use same `beta` for all layers of output
         beta: float, Polynomial, polynomial coefficients, or array of Polynomials
@@ -187,7 +187,7 @@ def get_psd(
     """Get the radially averaged 1D PSD of input 2D matrix
     Table 4.5 in Hanssen, 2001 (Page 143) has further explaination of outputs.
 
-    Input:
+    Args:
         image (2D ndarray) :  displacement in m.
         resolution (float), spatial resolution of input image in meters
         freq0 (float), reference spatial freqency in cycle / m.
@@ -291,7 +291,7 @@ def get_psd_stack(
     """Find the PSD estimates for a stack of images
     Passed onto get_psd
 
-    Input:
+    Args:
         stack (3D ndarray): displacement in meters (num_iamges, rows, cols)
         resolution (float), spatial resolution of input data in meters
         freq0 (float), reference spatial freqency in cycle / m.
@@ -332,7 +332,7 @@ def average_psd_radial(
     density=False,
 ):
     """Calculate the radially averaged power spectrum (assumes isotropy)
-    Inputs:
+    Args:
         psd2d (ndarray) of size (N, N) for 2D power spectral density.
             non-square images sized (r, c) will use N = min(r, c)
         image: (ndarray), (optional) if psd2d=None, pass original image to transform
@@ -382,7 +382,7 @@ def power_slope(freq, psd, freq0=1e-4, deg=3, verbose=False):
     Python translation of pslope.m (Ramon Hanssen, 2000), with added
     higher polynomials
 
-    Inputs:
+    Args:
         freq (1D / 2D ndarray): in cycle / m
         psd (1D / 2D ndarray): power spectral density
         freq0 (float) reference freqency in cycle / m
@@ -442,7 +442,7 @@ def get_psd_blocks(
     """For one image, get radially averaged PSD from multiple blocks within image
     Crops into subsets, calls `get_psd` on each
 
-    Input:
+    Args:
         data (2D ndarray) :  displacement in m.
         resolution (float), spatial resolution of input data in meters
         block_size (float): size of block side, in meters
@@ -493,7 +493,7 @@ def get_psd_blocks(
 def recon_power_spectral_density(p0, beta, resolution, freq0, N):
     """Reconstruct 1D power spectral density from input p0 and beta
 
-    Inputs:
+    Args:
         p0 (float): power spectral density in m^2 at `f0` Hz
         beta (Polynomial, float): power spectra slope in loglog scale
             if scalare passed, assuming it single slope of loglog plot
@@ -546,7 +546,7 @@ def average_psd_azimuth(
 ):
     """Get 1D power spectrum averaged by angular bin (azimuthal average)
 
-    Inputs:
+    Args:
         psd2d (ndarray): 2D power spectral density, size (N, N)
             non-square images sized (r, c) will use N = min(r, c)
         image (ndarray): (optional) if psd2d=None, pass original image to transform

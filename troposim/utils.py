@@ -2,13 +2,12 @@ import numpy as np
 
 DATE_FMT = "%Y%m%d"
 
-
 def crop_square_data(data, N=None):
     """Grab the largest square portion of size N from input 2D input
 
     Searches for square with greatest number of non-zero values.
 
-    Inputs:
+    Args:
         data (2D ndarray): input image
         N (int): optional, size of square input.
             If not provided, uses N = min(data.shape)
