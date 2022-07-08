@@ -19,27 +19,20 @@ def create_deramped_zarr(
 
     Parameters
     ----------
-    avg_slcs : [type]
-        [description]
-    deramped_file : [type]
-        [description]
-    avg_slc_file :
-        
-    mask :
+    deramped_file : str
+        output file name to save deramped data to
+    avg_slc_file : str
+        path to the average SLC file created by trodi package
+    mask : ndarray
         (Default value = None)
-    ds :
+    ds : str
         (Default value = "igrams")
-    units :
+    units : str
         (Default value = "rad")
-    scaling :
+    scaling : float
         (Default value = 1.0)
-    overwrite :
+    overwrite : bool
         (Default value = False)
-
-    Returns
-    -------
-
-    
     """
     try:
         import xarray as xr
@@ -108,11 +101,6 @@ def get_all_1d_psd_curves(
         (Default value = True)
     load :
         (Default value = True)
-
-    Returns
-    -------
-
-    
     """
     stack = avg_ifgs.sel(date=slice(min_date, max_date))
     # stack_data = stack.as_numpy()

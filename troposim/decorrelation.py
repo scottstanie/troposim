@@ -22,7 +22,6 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
     Returns
     -------
     ndarray : Decorrelation phase noise. Shape is same as `coherence`
-        
 
     Raises
     ------
@@ -105,14 +104,14 @@ def _sample_noise(phi_bins, pdf, size=1):
     ----------
     phi_bins :
         
-    pdf :
+    pdf : ndarray
         
-    size :
+    size : int or tuple of ints, optional
          (Default value = 1)
 
     Returns
     -------
-
+    ndarray
     """
     from scipy import stats
 

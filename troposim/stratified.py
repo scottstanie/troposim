@@ -38,8 +38,7 @@ def simulate(dem, K_params={}, h0_params={}, alpha_params={}):
 
     Returns
     -------
-
-    
+    np.ndarray
     """
     K = sample_K(**K_params)
     alpha = sample_alpha(**alpha_params)
@@ -66,15 +65,14 @@ def make_stratified_delay(dem, K, h0=7000, alpha=1.4, zero_mean=True):
 
     Returns
     -------
-
-    
+    ndarray
     """
     K, h0, alpha = _get_param_sizes(K, h0, alpha)
 
     if np.any(h0 < dem.max()):
         raise ValueError(f"{h0 = } must be higher than DEM")
     dh = h0 - dem
-    delay = K * dh ** alpha
+    delay = K * dh**alpha
     if zero_mean:
         if delay.ndim == 3:
             delay -= delay.mean(axis=(1, 2), keepdims=True)
@@ -92,15 +90,12 @@ def sample_K(mean=0.0, sigma=5e-6, shape=(1,)):
         (Default value = 0.0)
     sigma :
         (Default value = 5e-6)
-    shape :
-        (Default value = (1)
-    ) :
-        
+    shape : in or tuple[int]
+        (Default value = (1,))
 
     Returns
     -------
-
-    
+    np.ndarray
     """
     return np.random.laplace(loc=mean, scale=sigma, size=shape)
 
@@ -115,14 +110,7 @@ def sample_alpha(mean=1.4, sigma=0.1, shape=(1,)):
     sigma :
         (Default value = 0.1)
     shape :
-        (Default value = (1)
-    ) :
-        
-
-    Returns
-    -------
-
-    
+        (Default value = (1, ))
     """
     return np.random.normal(loc=mean, scale=sigma, size=shape)
 
@@ -137,35 +125,12 @@ def sample_h0(mean=7000, sigma=100, shape=(1,)):
     sigma :
         (Default value = 100)
     shape :
-        (Default value = (1)
-    ) :
-        
-
-    Returns
-    -------
-
-    
+        (Default value = (1, ))
     """
     return np.random.normal(loc=mean, scale=sigma, size=shape)
 
 
 def _get_param_sizes(K, h0, alpha):
-    """
-
-    Parameters
-    ----------
-    K :
-        
-    h0 :
-        
-    alpha :
-        
-
-    Returns
-    -------
-
-    
-    """
     if np.isscalar(K):
         K = np.array(K).reshape((1, 1, 1))
     else:

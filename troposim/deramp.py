@@ -12,12 +12,13 @@ def remove_ramp(z, deramp_order=1, mask=np.ma.nomask, copy=True, dtype=np.float3
         2D array, interpreted as heights
     deramp_order : int
         degree of surface estimation
-        deramp_order = 1 removes linear ramp, deramp_order = 2 fits quadratic surface (Default value = 1)
-    mask :
+        deramp_order = 1 removes linear ramp, deramp_order = 2 fits quadratic surface
+        (Default value = 1)
+    mask : ndarray
          (Default value = np.ma.nomask)
-    copy :
+    copy : bool
          (Default value = True)
-    dtype :
+    dtype : np.dtype
          (Default value = np.float32)
 
     Returns

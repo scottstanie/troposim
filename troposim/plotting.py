@@ -9,27 +9,20 @@ CMAP = "RdBu_r"
 
 
 def plot_stack(stack, titles=None, ntotal=9, cmap=CMAP, figsize=(8, 8)):
-    """
+    """Plot a portion of a stack of images in a facet grid
 
     Parameters
     ----------
-    stack :
-        
-    titles :
+    stack : ndarray
+        3D array of images
+    titles : list of str
         (Default value = None)
-    ntotal :
+    ntotal : int
         (Default value = 9)
     cmap :
         (Default value = CMAP)
-    figsize :
+    figsize : tuple[int, int]
         (Default value = (8)
-    8) :
-        
-
-    Returns
-    -------
-
-    
     """
     nrow = ncol = int(np.sqrt(ntotal))
     fig, axes = plt.subplots(nrow, ncol, figsize=figsize)
@@ -99,8 +92,10 @@ def plot_psd(
 
     Returns
     -------
-
-    
+    fig : matplotlib.figure.Figure
+        Figure object
+    axes : matplotlib.axes.Axes
+        Axes object
     """
     if freq is None or psd1d is None:
         from . import turbulence
@@ -163,42 +158,6 @@ def plot_psd1d(
     slopes=[],
     **plotkwargs,
 ):
-    """
-
-    Parameters
-    ----------
-    freq :
-        
-    psd1d :
-        
-    ax :
-        (Default value = None)
-    freq0 :
-        (Default value = None)
-    label :
-        (Default value = None)
-    color :
-        (Default value = "k")
-    linestyle :
-        (Default value = "-")
-    marker :
-        (Default value = None)
-    density :
-        (Default value = True)
-    per_km :
-        (Default value = True)
-    in_mm :
-        (Default value = False)
-    slopes :
-        (Default value = [])
-    **plotkwargs :
-        
-
-    Returns
-    -------
-
-    
-    """
     if ax is None:
         fig, ax = plt.subplots()
 
@@ -246,27 +205,6 @@ def plot_stack_over_time(
     igram_stack=None,  # Just for colorbar
     cmap="seismic_wide_y",
 ):
-    """
-
-    Parameters
-    ----------
-    avgs :
-        
-    sar_dates_used :
-        
-    vm :
-        (Default value = None)
-    igram_stack :
-        (Default value = None)
-    # Just for colorbarcmap :
-        (Default value = "seismic_wide_y")
-
-    Returns
-    -------
-
-    
-    """
-
     if vm is None:
         if igram_stack is not None:
             vm = np.nanpercentile(np.nanmax(np.abs(igram_stack)), 80)
@@ -297,36 +235,6 @@ def plot_psd1d_azimuth(
     marker="o",
     **plotkwargs,
 ):
-    """
-
-    Parameters
-    ----------
-    angles :
-        
-    psd1d :
-        
-    ax :
-        (Default value = None)
-    label :
-        (Default value = None)
-    ylim :
-        (Default value = (0)
-    1) :
-        
-    color :
-        (Default value = "k")
-    # linestyle :
-        (Default value = "-")
-    marker :
-        (Default value = "o")
-    **plotkwargs :
-        
-
-    Returns
-    -------
-
-    
-    """
     if not ax:
         fig, ax = plt.subplots()
 
