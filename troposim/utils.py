@@ -370,10 +370,9 @@ def block_iterator(arr_shape, block_shape, overlaps=(0, 0), start_offsets=(0, 0)
         (num_rows, num_cols), full size of array to access
     block_shape :
         (height, width), size of accessing blocks
-    overlaps :
+    overlaps : tuple[int, int]
         (row_overlap, col_overlap), number of pixels to re-include
         after sliding the block (default (0, 0))
-    0) :
         
     start_offsets :
          (Default value = (0)
@@ -384,13 +383,12 @@ def block_iterator(arr_shape, block_shape, overlaps=(0, 0), start_offsets=(0, 0)
 
     Examples
     --------
-
     >>> list(block_iterator((180, 250), (100, 100)))
     [((0, 100), (0, 100)), ((0, 100), (100, 200)), ((0, 100), (200, 250)), \
-    ((100, 180), (0, 100)), ((100, 180), (100, 200)), ((100, 180), (200, 250))]
+((100, 180), (0, 100)), ((100, 180), (100, 200)), ((100, 180), (200, 250))]
     >>> list(block_iterator((180, 250), (100, 100), overlaps=(10, 10)))
     [((0, 100), (0, 100)), ((0, 100), (90, 190)), ((0, 100), (180, 250)), \
-    ((90, 180), (0, 100)), ((90, 180), (90, 190)), ((90, 180), (180, 250))]
+((90, 180), (0, 100)), ((90, 180), (90, 190)), ((90, 180), (180, 250))]
 
     """
     rows, cols = arr_shape

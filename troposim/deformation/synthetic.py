@@ -34,8 +34,7 @@ def gaussian(
 
     Returns
     -------
-
-    
+    ndarray
     """
     d = delta(shape, row, col)
     out = ndi.gaussian_filter(d, sigma, mode="constant") * sigma ** 2
@@ -50,8 +49,8 @@ def delta(shape, row=None, col=None):
 
     Parameters
     ----------
-    shape :
-        
+    shape : tuple[int]
+       size of image to maek 
     row :
         (Default value = None)
     col :
@@ -59,8 +58,7 @@ def delta(shape, row=None, col=None):
 
     Returns
     -------
-
-    
+    ndarray
     """
     delta = np.zeros(shape)
     rows, cols = shape
@@ -73,18 +71,7 @@ def delta(shape, row=None, col=None):
 
 
 def _rotation_matrix(theta):
-    """CCW rotation matrix by `theta` degrees
-
-    Parameters
-    ----------
-    theta :
-        
-
-    Returns
-    -------
-
-    
-    """
+    """CCW rotation matrix by `theta` degrees"""
     theta_rad = np.deg2rad(theta)
     return np.array(
         [
@@ -95,22 +82,7 @@ def _rotation_matrix(theta):
 
 
 def _normalize_gaussian(out, normalize=False, amp=None):
-    """
-
-    Parameters
-    ----------
-    out :
-        
-    normalize :
-        (Default value = False)
-    amp :
-        (Default value = None)
-
-    Returns
-    -------
-
-    
-    """
+    """Normalize either to 1 max, or to `amp` max"""
     if normalize or amp is not None:
         out /= out.max()
     if amp is not None:
@@ -119,46 +91,14 @@ def _normalize_gaussian(out, normalize=False, amp=None):
 
 
 def _calc_ab(sigma, ecc):
-    """Calculate semi-major/semi-minor axis length from `sigma` and `ecc`entricity
-
-    Parameters
-    ----------
-    sigma :
-        
-    ecc :
-        
-
-    Returns
-    -------
-
-    
-    """
+    """Calculate semi-major/semi-minor axis length from `sigma` and `ecc`entricity"""
     a = np.sqrt(sigma ** 2 / (1 - ecc))
     b = a * (1 - ecc)
     return a, b
 
 
 def _xy_grid(shape, xmin=None, xmax=None, ymin=None, ymax=None):
-    """Make an xy grid centered at 0,0 in the middle
-
-    Parameters
-    ----------
-    shape :
-        
-    xmin :
-        (Default value = None)
-    xmax :
-        (Default value = None)
-    ymin :
-        (Default value = None)
-    ymax :
-        (Default value = None)
-
-    Returns
-    -------
-
-    
-    """
+    """Make an xy grid centered at 0,0 in the middle"""
     if xmin is None or xmax is None:
         xmin, xmax = (1, shape[1])
     if ymin is None or ymax is None:
@@ -208,10 +148,6 @@ def gaussian_ellipse(
         value of peak of gaussian (Default value = None)
     noise_sigma : float
         optional, adds gaussian noise to blob (Default value = 0)
-
-    Returns
-    -------
-
     
     """
     from scipy.stats import multivariate_normal
@@ -241,20 +177,7 @@ def gaussian_ellipse(
 
 
 def valley(shape, rotate=0):
-    """Make a valley in image center (curvature only in 1 direction)
-
-    Parameters
-    ----------
-    shape :
-        
-    rotate :
-        (Default value = 0)
-
-    Returns
-    -------
-
-    
-    """
+    """Make a valley in image center (curvature only in 1 direction) """
     from skimage import transform
 
     rows, cols = shape
@@ -265,38 +188,14 @@ def valley(shape, rotate=0):
 
 
 def bowl(shape):
-    """Simple quadratic bowl
-
-    Parameters
-    ----------
-    shape :
-        
-
-    Returns
-    -------
-
-    
-    """
+    """Simple quadratic bowl"""
     xx, yy = _xy_grid(shape)
     z = xx ** 2 + yy ** 2
     return z / np.max(z)
 
 
 def quadratic(shape, coeffs):
-    """2D quadratic function
-
-    Parameters
-    ----------
-    shape :
-        
-    coeffs :
-        
-
-    Returns
-    -------
-
-    
-    """
+    """2D quadratic function"""
     nrows, ncols = shape
     row_block, col_block = np.mgrid[0:nrows, 0:ncols]
     yy, xx = row_block.flatten(), col_block.flatten()

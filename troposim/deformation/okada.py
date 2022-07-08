@@ -87,10 +87,20 @@ def displacement(
 
     Returns
     -------
-
+    u_out : ndarray
+        the displacement field
+        shape: (3, ny, nx)
+        Each pixel is [ux, uy, uz] 
+    xx : ndarray
+        the x-coordinates of the displacement field
+    yy : ndarray
+        the y-coordinates of the displacement field
     
-    >>> success, u, grad_u = dc3dwrapper(0.6, [1.0, 1.0, -1.0],
-                                3.0, 90, [-0.7, 0.7], [-0.7, 0.7],
+    Examples
+    --------
+    >>> from okada_wrapper import dc3dwrapper
+    >>> success, u, grad_u = dc3dwrapper(0.6, [1.0, 1.0, -1.0],\
+                                3.0, 90, [-0.7, 0.7], [-0.7, 0.7],\
                                 [1.0, 0.0, 0.0])
     """
     if alpha is None:
@@ -159,8 +169,8 @@ def project_to_los(u, los):
 
     Returns
     -------
-
-    
+    u_out : 2D ndarray
+        the projected displacement field
     """
     los = np.array(los)
     # assert this?
@@ -174,26 +184,32 @@ def project_to_los(u, los):
 
 
 def rake_to_slips(rake_angle, slip_magnitude):
-    """rake_angle (float): the rake angle of the fault, in degrees
-    slip_magnitude (float): the magnitude of the fault slip, in meters. For use with rake_angle
+    """Convert a rake angle and magnitude to strike-slip and dip-slip components.
 
     Parameters
     ----------
-    rake_angle :
+    rake_angle : float
+        the rake angle of the fault, in degrees
         
-    slip_magnitude :
-        
+    slip_magnitude : float
+        the magnitude of the fault slip, in meters. For use with rake_angle
 
     Returns
     -------
+    strike_slip : float
+        the strike-slip, in meters, of the rectangular dislocation surface
+    dip_slip : float
+        the dip-slip, in meters, of the rectangular dislocation surface
 
     
-    >>> rake_to_slips(-90, 0.1) # purely dip slip on normal fault
-        0.0, -0.1
-        >>> rake_to_slips(0, 0.1) # pure left lateral strike slip
-        0.1, 0.0
-        >>> rake_to_slips(90, 0.1) # reverse fault slip
-        0.0, 0.1
+    Examples
+    --------
+    >>> tuple(np.round(rake_to_slips(-90, 0.1), 4)) # purely dip slip on normal fault
+    (0.0, -0.1)
+    >>> tuple(np.round(rake_to_slips(0, 0.1), 4)) # pure left lateral strike slip
+    (0.1, 0.0)
+    >>> tuple(np.round(rake_to_slips(90, 0.1), 4)) # reverse fault slip
+    (0.0, 0.1)
     """
     strike_slip = slip_magnitude * np.cos(np.deg2rad(rake_angle))
     dip_slip = slip_magnitude * np.sin(np.deg2rad(rake_angle))
@@ -218,51 +234,33 @@ def random_displacement(
 
     Parameters
     ----------
-    source_depth_range :
-        (Default value = (0.3e3)
-    5e3) :
-        
-    dip_angle_range :
-        (Default value = (0)
-    90) :
-        
-    strike_angle_range :
-        (Default value = (0)
-    360) :
-        
-    strike_width_range :
-        (Default value = (5e3)
-    20e3) :
-        
-    dip_width_range :
-        (Default value = (300)
-    1000) :
-        
-    rake_angle_range :
-        (Default value = (-89)
-    -91) :
-        
-    # dip slipslip_magnitude_range :
-        (Default value = (0.05)
-    0.5) :
-        
-    alpha :
+    source_depth_range : tuple[float, float]
+        (Default value = (0.3e3,5e3)
+    dip_angle_range : tuple[float, float]
+        (Default value = (0, 90)
+    strike_angle_range : tuple[float, float]
+        (Default value = (0, 360)
+    strike_width_range : tuple[float, float]
+        (Default value = (5e3, 20e3)
+    dip_width_range : tuple[float, float]
+        (Default value = (300, 1000)
+    rake_angle_range : tuple[float, float]
+        (Default value = (-89, -91)
+    slip_magnitude_range : tuple[float, float]
+        (Default value = (0.05, 0.5)
+    alpha : float
         (Default value = 0.66)
-    resolution :
+    resolution : float
         (Default value = 180)
-    shape :
-        (Default value = (200)
-    200) :
+    shape : tuple[int, int]
+        (Default value = (200, 200)
         
-    seed :
+    seed : int
         (Default value = None)
-    **kwargs :
-        
 
     Returns
     -------
-
-    
+    ndarray
     """
     # see https://stackoverflow.com/a/49849045/4174466 for why RandomState
     rng = np.random.default_rng(seed=seed)
@@ -315,8 +313,12 @@ def test_okada(
 
     Returns
     -------
-
-    
+    u : ndarray
+        the displacement field from `displacement`
+    xx : ndarray
+        the x-coordinates of the displacement field
+    yy : ndarray
+        the y-coordinates of the displacement field
     """
     import matplotlib.pyplot as plt
 
