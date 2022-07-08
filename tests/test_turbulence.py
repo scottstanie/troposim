@@ -49,6 +49,6 @@ def test_get_psd():
     out = turbulence.simulate(shape=shape, beta=b, freq0=freq0, p0=p0)
     p0_hat, beta_hat, _, _ = turbulence.get_psd(out, freq0=freq0, deg=1)
 
-    tol = 0.2
+    tol = 0.1
     assert abs(beta_hat.coef[1] - b) < tol
     assert abs(p0_hat - p0) < tol
