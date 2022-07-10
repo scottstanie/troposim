@@ -195,8 +195,10 @@ def get_psd(
     -------
     p0_hat : ndarray
         Estimated power at reference frequency.
-    beta_hat : np.Polynomial
-        Estimated slope of PSD. Polynomial of degree `deg`.
+    beta_hat : ndarray[np.Polynomial]
+        Estimated slope of PSD(s). Polynomial of degree `deg`. 
+        Returns one for each image passed (if a stack), but will
+        always return an array even for 1
     freq : ndarray
         Spatial frequencies in cycle / m.
     psd1d : ndarray
@@ -234,6 +236,7 @@ def get_psd(
 
     # calculate slopes from spectrum
     p0_hat, beta_hat = fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
+    beta_hat = np.array([beta_hat])
     if outname is not None:
         save_psd(p0_hat, beta_hat, freq, psd1d, density, outname=outname)
     return p0_hat, beta_hat, freq, psd1d
@@ -297,6 +300,10 @@ def load_psd(filename):
         density = data["density"]
     # convert beta_hat to array of polynomials
     beta_hat = np.array([Polynomial(b) for b in beta_hat])
+    try:
+        p0_hat = p0_hat.item()
+    except ValueError:
+        pass
     return p0_hat, beta_hat, freq, psd1d, density
 
 
@@ -582,7 +589,7 @@ def _get_psd_stack(
     Same as get_psd, but each item is an iterable of (p0_hat, beta_hat, freq, psd1d)
     """
     p0_hat_arr = []
-    beta_hat_list = []
+    beta_hat_arr = []
     psd1d_arr = []
     freq = None
     for image in tqdm(stack):
@@ -596,12 +603,14 @@ def _get_psd_stack(
             density=density,
         )
         p0_hat_arr.append(p0_hat)
-        beta_hat_list.append(beta_hat)
+        beta_hat_arr.append(beta_hat[0])
         psd1d_arr.append(psd1d)
-    p0_hat_arr, psd1d_arr = np.array(p0_hat_arr), np.stack(psd1d_arr)
+    p0_hat_arr = np.array(p0_hat_arr)
+    beta_hat_arr = np.array(beta_hat_arr)
+    psd1d_arr = np.stack(psd1d_arr)
     if outname is not None:
-        save_psd(p0_hat_arr, beta_hat_list, freq, psd1d_arr, density, outname=outname)
-    return p0_hat_arr, beta_hat_list, freq, psd1d_arr
+        save_psd(p0_hat_arr, beta_hat_arr, freq, psd1d_arr, density, outname=outname)
+    return p0_hat_arr, beta_hat_arr, freq, psd1d_arr
 
 
 def get_psd1d_from_p0_beta(p0, beta, resolution, freq0, N):
