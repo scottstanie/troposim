@@ -114,12 +114,18 @@ def simulate(
         k = 1 / lmbda
 
     # Make `beta` into an array of Polynomials
-    beta_amp = _standardize_beta(beta, num_images, verbose=verbose)
+    beta = _standardize_beta(beta, num_images, verbose=verbose)
+    # The power beta/2 is used because the power spectral
+    # density is proportional to the amplitude squared
+    # Here we work with the amplitude, instead of the power
+    # so we should take sqrt( k.^beta) = k.^(beta/2)  RH
+    beta_amp = beta / 2
 
     # Now evaluate each using the coefficients
-    bcoeffs = np.array([b.coef for b in beta_amp])
-    logP = polyval(np.log10(k), bcoeffs.T)
+    b_coeffs = np.array([b.coef for b in beta_amp])
+    logP = polyval(np.log10(k), b_coeffs.T)
 
+    # create the envelope to shape the power of the white noise
     P = 10**logP
     # correct dividing by zero
     P[..., lmbda == 0] = 1.0
@@ -218,8 +224,20 @@ def get_psd(
 
 
 def _standardize_beta(beta, num_images, verbose=False):
-    # Get the beta passed into an array of Polynomial
-    if np.isscalar(beta):
+    """Get beta into an ndarray of Polynomials with length = num_images
+
+    Allowed options are
+    1. a single scalar, used as the linear slope
+    2. a list/array of scalars, equal in length to `num_images`
+    3. a 2d array of shape (num_images, deg+1) of polynomial coefficients
+    """
+    try:
+        beta = np.array(beta).astype(float)
+    except TypeError:
+        raise ValueError(f"beta must be numeric coefficients: {beta}")
+
+    # 1. A single scalar means the linear slope used for all images
+    if beta.ndim == 0:
         if beta > 0:
             beta *= -1.0
             if verbose:
@@ -227,32 +245,28 @@ def _standardize_beta(beta, num_images, verbose=False):
         # Convert to linear polynomial
         beta = np.array([Polynomial([0, beta])])
         # beta = beta * np.ones(3)
-    elif len(beta) == num_images:
-        # beta is a list of Polynomials. Make into array for broadcasting
-        if isinstance(beta[0], Polynomial):
-            beta = np.array(beta)
-        else:
-            beta = np.array([Polynomial(b) for b in beta])
-    elif not isinstance(beta, Polynomial):
-        beta = np.array([Polynomial(beta)])
 
-    # The power beta/2 is used because the power spectral
-    # density is proportional to the amplitude squared
-    # Here we work with the amplitude, instead of the power
-    # so we should take sqrt( k.^beta) = k.^(beta/2)  RH
-    beta_amp = beta / 2
+    # 2. Passing a list of scalars (slopes)
+    # There should be 1 for each requested image, and the input 
+    # should be 1D
+    elif beta.ndim == 1:
+        beta = np.array([Polynomial([0, b]) for b in beta])
+    # 3. Passing an array of coefficients. Each row is the 2 (or 4)
+    # coefficients of a linear (cubic) polynomial
+    elif beta.ndim == 2:
+        if len(beta[0]) not in (2, 4):
+            raise ValueError("2D beta input must be list of polynomial coeffs")
+        beta = np.array([Polynomial(b) for b in beta])
+    else:
+        raise ValueError(f"Invalid beta parameters: {beta}")
 
-    # create the envelope to shape the power of the white noise
-    if num_images == 1:
-        # Make into same form as the multiple-beta case
-        beta_amp = np.array([beta_amp]).ravel()
-    if len(beta_amp) > num_images:
-        beta_amp = beta_amp[:num_images]
-    elif len(beta_amp) < num_images:
-        beta_amp = np.repeat(beta_amp, num_images)[:num_images]
+    if len(beta) == 1:
+        beta = np.repeat(beta, num_images)
+    if len(beta) != num_images:
+        raise ValueError(f"{len(beta) = } does not match {num_images = }")
+
     if verbose:
-        print(f"Simulation PSD polynomial: {beta_amp = }")
-
+        print(f"Simulation PSD polynomial: {beta = }")
     return beta
 
 
