@@ -1,10 +1,12 @@
-# Author: Scott Staniewicz
-# Adapted from MintPy fractal.py module,
-#   https://github.com/insarlab/MintPy/blob/4c2b6f8f80c86f245f8635bbb0ce2e46b29cb576/mintpy/simulation/fractal.py
-#   (Author: Zhang Yunjun, 2019)
-# which was a Python translation in MintPy of the matlab scripts written by
-# Ramon Hanssen, May 2000, available in the following website:
-#     http://doris.tudelft.nl/software/insarfractal.tar.gz
+"""Module for simulating isotropic tropospheric turbulence and estimating turbulence properties.
+Author: Scott Staniewicz
+Adapted from MintPy fractal.py module,
+  https://github.com/insarlab/MintPy/blob/4c2b6f8f80c86f245f8635bbb0ce2e46b29cb576/mintpy/simulation/fractal.py
+  (Author: Zhang Yunjun, 2019)
+which was a Python translation in MintPy of the matlab scripts written by
+Ramon Hanssen, May 2000, available in the following website:
+    http://doris.tudelft.nl/software/insarfractal.tar.gz
+"""
 import numpy as np
 from numpy.fft import fft2, fftfreq, fftshift, ifft2
 from numpy.polynomial.polynomial import Polynomial, polyval
@@ -21,6 +23,8 @@ def simulate(
     beta=2.5,
     p0=1e-2,
     freq0=1e-4,
+    psd1d=None,
+    freq=None,
     resolution=60.0,
     density=False,
     seed=None,
@@ -42,12 +46,10 @@ def simulate(
         (rows, cols), or (num_images, rows, cols) of output
         If passing 3D shape, will use same `beta` for all layers of output
         (Default value = (300, 300))
-    beta : float or Polynomial or ndarray[Polynomial]
-        float, Polynomial, polynomial coefficients, or array of Polynomials
+    beta : float, Polynomial, array of poly coeffs, or ndarray[Polynomial]
         For scalar: power law exponent for the slope of radially averaged 2D spectrum
-        Polynomial: result from fit of radially averaged PSD vs frequency,
-            in log-log scale
-        (or, see result from `get_psd`)
+        Polynomial: result from fit of radially averaged log PSD vs log frequency
+            (or, see result from `get_psd`)
         array of Polynomials: one for each layer of output. Must match 3D shape.
         (Default value = 2.5)
     p0 : float
@@ -57,9 +59,15 @@ def simulate(
     freq0 (float), reference spatial freqency where `p0` defined), in cycle / m
         (default 1e-4, or 1 cycle/10 km)
     resolution : float
-        spatial resolution of output, in meters (Default value = 60.0)
+        spatial resolution of output pixels, in meters (Default value = 60.0)
+    psd1d : ndarray
+        1D power spectral density at each spatial frequency in `freq`.
+        Alternative to `beta` and `freq0`.
+    freq : ndarray
+        Spatial frequencies in cycle / m.
+        Alternative to passing `resolution`
     density : bool
-        Indicates the `p0` argument is for a density
+        Indicates the units of `p0` represent a density
         If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
         (Default value = False)
     seed : int
@@ -77,7 +85,7 @@ def simulate(
     --------
     >>> from troposim import turbulence
     >>> out = turbulence.simulate(shape=(200, 200), beta=2.5)
-    >>> out = turbulence.simulate(shape=(3, 100, 100), beta=[2.0, 2.5, 3.0])
+    >>> out = turbulence.simulate(shape=(4, 200, 200), beta=[2.0, 2.2, 2.7, 3.0])
     """
     if p0 is None or np.all(np.array(p0) == 0):
         return np.zeros(shape)
@@ -88,36 +96,10 @@ def simulate(
         num_images = 1
         length, width = shape
 
-    # Get the beta passed into an array of Polynomial
-    if np.isscalar(beta):
-        if beta > 0:
-            beta *= -1.0
-            if verbose:
-                print(f"reversed sign on scalar slope: {beta = }")
-        # Convert to linear polynomial
-        beta = np.array([Polynomial([0, beta])])
-        # beta = beta * np.ones(3)
-    elif len(beta) == num_images:
-        # beta is a list of Polynomials. Make into array for broadcasting
-        if isinstance(beta[0], Polynomial):
-            beta = np.array(beta)
-        else:
-            beta = np.array([Polynomial(b) for b in beta])
-    elif not isinstance(beta, Polynomial):
-        beta = np.array([Polynomial(beta)])
-    if verbose:
-        print(f"Simulation PSD polynomial: {beta = }")
-
-    # simulate white noise signal
+    # Start with the 2D PSD of white noise
     rng = np.random.default_rng(seed) if seed is not None else RNG
     h = rng.uniform(size=shape)
     H = fft2(h)
-
-    # The power beta/2 is used because the power spectral
-    # density is proportional to the amplitude squared
-    # Here we work with the amplitude, instead of the power
-    # so we should take sqrt( k.^beta) = k.^(beta/2)  RH
-    beta_amp = beta / 2
 
     # lambda is radial distance vector (or wavelength. units: meters)
     lmbda_x = np.concatenate((np.arange(width / 2 + 1), np.arange(-width / 2 + 1, 0)))
@@ -127,19 +109,12 @@ def simulate(
         np.sqrt(lmbda_y[:, np.newaxis] ** 2 + lmbda_x[np.newaxis, :] ** 2) * resolution
     )
 
-    # Convert to spatial frequencies for polynomial evaluation
+    # Convert to spatial frequencies for polynomial evaluation (units: cycles / m)
     with np.errstate(divide="ignore"):
         k = 1 / lmbda
 
-    # logP = beta_amp(np.log10(k))
-    # create the envelope to shape the power of the white noise
-    if num_images == 1:
-        # Make into same form as the multiple-beta case
-        beta_amp = np.array([beta_amp]).ravel()
-    if len(beta_amp) > num_images:
-        beta_amp = beta_amp[:num_images]
-    elif len(beta_amp) < num_images:
-        beta_amp = np.repeat(beta_amp, num_images)[:num_images]
+    # Make `beta` into an array of Polynomials
+    beta_amp = _standardize_beta(beta, num_images, verbose=verbose)
 
     # Now evaluate each using the coefficients
     bcoeffs = np.array([b.coef for b in beta_amp])
@@ -164,10 +139,11 @@ def simulate(
     H_shaped *= np.expand_dims(norm_factor, axis=(-2, -1))
     fsurf = ifft2(H_shaped).real
     return np.squeeze(fsurf)
+    # return np.squeeze(fsurf), k, H_shaped
 
 
 def get_psd(
-    image=None,
+    image,
     resolution=60.0,
     freq0=1e-4,
     deg=3,
@@ -176,7 +152,6 @@ def get_psd(
     density=False,
 ):
     """Get the radially averaged 1D PSD of input 2D matrix
-    Table 4.5 in Hanssen, 2001 (Page 143) has further explaination of outputs.
 
     Parameters
     ----------
@@ -197,24 +172,29 @@ def get_psd(
         (Default value = True)
     resolution :
         (Default value = 60.0)
-    freq0 :
+    freq0 : float
+        Reference spatial frequency in cycle / m. (Default value = 1e-4)
         (Default value = 1e-4)
-    N :
+    N : int
         (Default value = None)
-    density :
-        (Default value = False)
+    density : bool
+        Indicates whether units (Default value = False)
 
     Returns
     -------
     p0_hat : ndarray
-    beta_hat
-    freq
-    psd1d
-
+        Estimated power at reference frequency.
+    beta_hat : np.Polynomial
+        Estimated slope of PSD. Polynomial of degree `deg`.
+    freq : ndarray
+        Spatial frequencies in cycle / m.
+    psd1d : ndarray
+        1D power spectral density at each spatial frequency in `freq`.
+        Units are m^2 (if density=False) or m^2 / (1/m^2) (if density=True)
 
     """
     if image.ndim > 2:
-        return get_psd_stack(
+        return _get_psd_stack(
             image,
             resolution=resolution,
             freq0=freq0,
@@ -233,8 +213,47 @@ def get_psd(
     freq, psd1d = average_psd_radial(psd2d, resolution=resolution, density=density)
 
     # calculate slopes from spectrum
-    p0_hat, beta_hat = power_slope(freq, psd1d, freq0=freq0, deg=deg)
+    p0_hat, beta_hat = fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
     return p0_hat, beta_hat, freq, psd1d
+
+
+def _standardize_beta(beta, num_images, verbose=False):
+    # Get the beta passed into an array of Polynomial
+    if np.isscalar(beta):
+        if beta > 0:
+            beta *= -1.0
+            if verbose:
+                print(f"reversed sign on scalar slope: {beta = }")
+        # Convert to linear polynomial
+        beta = np.array([Polynomial([0, beta])])
+        # beta = beta * np.ones(3)
+    elif len(beta) == num_images:
+        # beta is a list of Polynomials. Make into array for broadcasting
+        if isinstance(beta[0], Polynomial):
+            beta = np.array(beta)
+        else:
+            beta = np.array([Polynomial(b) for b in beta])
+    elif not isinstance(beta, Polynomial):
+        beta = np.array([Polynomial(beta)])
+
+    # The power beta/2 is used because the power spectral
+    # density is proportional to the amplitude squared
+    # Here we work with the amplitude, instead of the power
+    # so we should take sqrt( k.^beta) = k.^(beta/2)  RH
+    beta_amp = beta / 2
+
+    # create the envelope to shape the power of the white noise
+    if num_images == 1:
+        # Make into same form as the multiple-beta case
+        beta_amp = np.array([beta_amp]).ravel()
+    if len(beta_amp) > num_images:
+        beta_amp = beta_amp[:num_images]
+    elif len(beta_amp) < num_images:
+        beta_amp = np.repeat(beta_amp, num_images)[:num_images]
+    if verbose:
+        print(f"Simulation PSD polynomial: {beta_amp = }")
+
+    return beta
 
 
 def get_psd2d(
@@ -260,11 +279,12 @@ def get_psd2d(
         If None, will find the largest sqaure with greatest number of nonzeros
         (see `utils.crop_square_data`)
     density : bool
-        Normalize the PSD to be a density. Defaults to True.
+        Normalize the PSD to be a density.
         If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
         E.g. for an image with units centimeters, with pixel spacing of 1 meters,
         the PSD will have units (cm^2) / (1/m)^2.
         Otherwise, will only normalize by (1/(rows*cols))
+        (Default value = False)
     resolution : float
         spatial resolution of input image in meters
         used if `density=False,` to normalize. (Default value = None)
@@ -286,7 +306,6 @@ def get_psd2d(
     psd2d = np.abs(fdata2d) ** 2 / (rows * cols)
 
     if density:
-
         psd2d *= resolution**2
         # print(f"mult psd2d by {resolution**2:.1f}")
         # print(f"if in [km]: {(resolution/1000)**2:.1f}")
@@ -297,70 +316,10 @@ def get_psd2d(
     return psd2d
 
 
-def get_psd_stack(
-    stack,
-    resolution=60.0,
-    freq0=1e-4,
-    deg=3,
-    crop=True,
-    N=None,
-    density=False,
-):
-    """Find the PSD estimates for a stack of images
-    Passed onto get_psd
-
-    Parameters
-    ----------
-    stack : 3D ndarray
-        displacement in meters (num_iamges, rows, cols)
-    stack : 3D ndarray
-        displacement in meters (num_iamges, rows, cols)
-        resolution (float), spatial resolution of input data in meters
-    stack : 3D ndarray
-        displacement in meters (num_iamges, rows, cols)
-        resolution (float), spatial resolution of input data in meters
-        freq0 (float), reference spatial freqency in cycle / m.
-    deg : int
-        degree of Polynomial to fit to PSD. default = 3, cubic
-    crop : bool
-        crop the data into a square image with fewest non-zero pixels (Default value = True)
-    N : int
-        size to crop square (defaults to size of smaller side)
-    resolution :
-        (Default value = 60.0)
-    freq0 :
-        (Default value = 1e-4)
-    density :
-        (Default value = False)
-
-    Returns
-    -------
-    Same as get_psd, but each item is an iterable of (p0_hat, beta_hat, freq, psd1d)
-    """
-    p0_hat_arr = []
-    beta_hat_list = []
-    psd1d_arr = []
-    freq = None
-    for image in tqdm(stack):
-        p0_hat, beta_hat, freq, psd1d = get_psd(
-            image,
-            resolution=resolution,
-            freq0=freq0,
-            deg=deg,
-            crop=crop,
-            N=N,
-            density=density,
-        )
-        p0_hat_arr.append(p0_hat)
-        beta_hat_list.append(beta_hat)
-        psd1d_arr.append(psd1d)
-    return np.array(p0_hat_arr), beta_hat_list, freq, np.stack(psd1d_arr)
-
-
 def average_psd_radial(
     psd2d=None,
     image=None,
-    resolution=50.0,
+    resolution=60.0,
     density=False,
 ):
     """Calculate the radially averaged power spectrum (assumes isotropy)
@@ -381,7 +340,7 @@ def average_psd_radial(
     freq_pos : ndarray
         radial frequency in cycles / m
     psd1d : ndarray
-        power spectral density in m^2 (density = False) 
+        power spectral density in m^2 (density = False)
         or (m^2) / (1 / m^2) (density = True)
     """
     if psd2d is None:
@@ -414,12 +373,12 @@ def average_psd_radial(
     return freq_pos, psd1d
 
 
-def power_slope(freq, psd, freq0=1e-4, deg=3, verbose=False):
-    """Derive the slope beta and p0 of an exponential function in loglog scale
+def fit_psd1d(freq, psd, freq0=1e-4, deg=3, verbose=False):
+    """Fit the slope `beta` and p0 of a 1D PSD in loglog scale
     p = p0 * (freq/freq0)^(-beta)
 
     Python translation of pslope.m (Ramon Hanssen, 2000), with added
-    higher polynomials
+    higher order polynomial option
 
     Parameters
     ----------
@@ -484,6 +443,68 @@ def power_slope(freq, psd, freq0=1e-4, deg=3, verbose=False):
     if verbose:
         print(f"estimated {p0 = :.4g}")
     return p0, beta_poly
+
+
+def _get_psd_stack(
+    stack,
+    resolution=60.0,
+    freq0=1e-4,
+    deg=3,
+    crop=True,
+    N=None,
+    density=False,
+):
+    """Find the PSD estimates for a stack of images
+    Passed onto get_psd
+
+    Parameters
+    ----------
+    stack : 3D ndarray
+        displacement in meters (num_iamges, rows, cols)
+    stack : 3D ndarray
+        displacement in meters (num_iamges, rows, cols)
+        resolution (float), spatial resolution of input data in meters
+    stack : 3D ndarray
+        displacement in meters (num_iamges, rows, cols)
+        resolution (float), spatial resolution of input data in meters
+        freq0 (float), reference spatial freqency in cycle / m.
+    deg : int
+        degree of Polynomial to fit to PSD. default = 3, cubic
+    crop : bool
+        crop the data into a square image with fewest non-zero pixels (Default value = True)
+    N : int
+        size to crop square (defaults to size of smaller side)
+    resolution :
+        (Default value = 60.0)
+    freq0 :
+        (Default value = 1e-4)
+    density :
+        Normalize the PSD to be a density. Defaults to True.
+        If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
+        (Default value = False)
+
+    Returns
+    -------
+    Same as get_psd, but each item is an iterable of (p0_hat, beta_hat, freq, psd1d)
+    """
+    p0_hat_arr = []
+    beta_hat_list = []
+    psd1d_arr = []
+    freq = None
+    for image in tqdm(stack):
+        p0_hat, beta_hat, freq, psd1d = get_psd(
+            image,
+            resolution=resolution,
+            freq0=freq0,
+            deg=deg,
+            crop=crop,
+            N=N,
+            density=density,
+        )
+        p0_hat_arr.append(p0_hat)
+        beta_hat_list.append(beta_hat)
+        psd1d_arr.append(psd1d)
+    return np.array(p0_hat_arr), beta_hat_list, freq, np.stack(psd1d_arr)
 
 
 def get_psd_blocks(
@@ -610,7 +631,6 @@ def debug(surf):
     )
 
 
-# TODO: 0-180 and 180-360 are the same
 def average_psd_azimuth(
     psd2d=None, image=None, resolution=60.0, dTheta=30, r_min=0, r_max=np.inf
 ):
@@ -638,7 +658,7 @@ def average_psd_azimuth(
     Returns
     -------
     angles : ndarray
-        angles in degrees
+        angles in degrees from 0 to 180
     psd1d : ndarray
         1D power spectral density, size same as angles
     """
