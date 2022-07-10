@@ -7,6 +7,7 @@ which was a Python translation in MintPy of the matlab scripts written by
 Ramon Hanssen, May 2000, available in the following website:
     http://doris.tudelft.nl/software/insarfractal.tar.gz
 """
+from pathlib import Path
 import numpy as np
 from numpy.fft import fft2, fftfreq, fftshift, ifft2
 from numpy.polynomial.polynomial import Polynomial, polyval
@@ -23,7 +24,7 @@ def simulate(
     beta=2.5,
     p0=1e-2,
     freq0=1e-4,
-    psd1d=None,
+    psd1d=None,  # TODO
     freq=None,
     resolution=60.0,
     density=False,
@@ -126,7 +127,7 @@ def simulate(
     logP = polyval(np.log10(k), b_coeffs.T)
 
     # create the envelope to shape the power of the white noise
-    P = 10**logP
+    P = 10 ** logP
     # correct dividing by zero
     P[..., lmbda == 0] = 1.0
     # Pad with front axis if simulating multiple images
@@ -156,6 +157,7 @@ def get_psd(
     crop=True,
     N=None,
     density=False,
+    outname=None,
 ):
     """Get the radially averaged 1D PSD of input 2D matrix
 
@@ -182,9 +184,12 @@ def get_psd(
         Reference spatial frequency in cycle / m. (Default value = 1e-4)
         (Default value = 1e-4)
     N : int
-        (Default value = None)
+        Crop the image to a square with max size N
     density : bool
         Indicates whether units (Default value = False)
+    outname : str, optional
+        Save the PSD parameters to a file.
+        If this name exists, the parameters will be loaded from the file.
 
     Returns
     -------
@@ -199,6 +204,14 @@ def get_psd(
         Units are m^2 (if density=False) or m^2 / (1/m^2) (if density=True)
 
     """
+    if outname and Path(outname).exists():
+        p0_hat, beta_hat, freq, psd1d, d = load_psd(outname)
+        if density != d:
+            raise ValueError(
+                "The density of the saved PSD is different than the input density."
+            )
+        return p0_hat, beta_hat, freq, psd1d
+
     if image.ndim > 2:
         return _get_psd_stack(
             image,
@@ -208,6 +221,7 @@ def get_psd(
             crop=crop,
             N=N,
             density=density,
+            outname=outname,
         )
 
     psd2d = get_psd2d(
@@ -220,7 +234,70 @@ def get_psd(
 
     # calculate slopes from spectrum
     p0_hat, beta_hat = fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
+    if outname is not None:
+        save_psd(p0_hat, beta_hat, freq, psd1d, density, outname=outname)
     return p0_hat, beta_hat, freq, psd1d
+
+
+def save_psd(p0_hat, beta_hat, freq, psd1d, density, outname=None, save_dir=None):
+    """Save the PSD parameters to a file.
+
+    Parameters
+    ----------
+    p0_hat : ndarray
+        Estimated power at reference frequency.
+    beta_hat : np.Polynomial
+        Estimated slope of PSD. Polynomial of degree `deg`.
+    freq : ndarray
+        Spatial frequencies in cycle / m.
+    psd1d : ndarray
+        1D power spectral density at each spatial frequency in `freq`.
+        Units are m^2 (if density=False) or m^2 / (1/m^2) (if density=True)
+    outname : str, optional
+        Filename to save the PSD parameters
+        If not passed, will save to `psd_params.npz`
+    save_dir : str, optional
+        Directory to save the PSD parameters
+    """
+    if outname is None:
+        outname = "psd_params.npz"
+    if save_dir is None:
+        save_dir = Path()
+    save_name = save_dir / Path(outname)
+
+    beta_coeffs = [b.coef for b in beta_hat]
+    np.savez(
+        save_name,
+        p0=p0_hat,
+        beta=beta_coeffs,
+        freq=freq,
+        psd1d=psd1d,
+        density=density,
+    )
+    return save_name
+
+
+def load_psd(filename):
+    """Load a saved PSD parameter file
+
+    Args:
+        filename (str or Path): Name of the file to load.
+
+    Returns:
+        p0_hat (ndarray): Estimated power at reference frequency.
+        beta_hat (np.Polynomial): Estimated slope of PSD. Polynomial of degree `deg`.
+        freq (ndarray): Spatial frequencies in cycle / m.
+        psd1d (ndarray): 1D power spectral density at each spatial frequency in `freq`.
+    """
+    with np.load(filename) as data:
+        p0_hat = data["p0"]
+        beta_hat = data["beta"]
+        freq = data["freq"]
+        psd1d = data["psd1d"]
+        density = data["density"]
+    # convert beta_hat to array of polynomials
+    beta_hat = np.array([Polynomial(b) for b in beta_hat])
+    return p0_hat, beta_hat, freq, psd1d, density
 
 
 def _standardize_beta(beta, num_images, verbose=False):
@@ -247,7 +324,7 @@ def _standardize_beta(beta, num_images, verbose=False):
         # beta = beta * np.ones(3)
 
     # 2. Passing a list of scalars (slopes)
-    # There should be 1 for each requested image, and the input 
+    # There should be 1 for each requested image, and the input
     # should be 1D
     elif beta.ndim == 1:
         beta = np.array([Polynomial([0, b]) for b in beta])
@@ -320,7 +397,7 @@ def get_psd2d(
     psd2d = np.abs(fdata2d) ** 2 / (rows * cols)
 
     if density:
-        psd2d *= resolution**2
+        psd2d *= resolution ** 2
         # print(f"mult psd2d by {resolution**2:.1f}")
         # print(f"if in [km]: {(resolution/1000)**2:.1f}")
         # print(f"So dividing by Fs**2 leads to boost of {(1000/resolution)**2:.1f}")
@@ -467,6 +544,7 @@ def _get_psd_stack(
     crop=True,
     N=None,
     density=False,
+    outname=None,
 ):
     """Find the PSD estimates for a stack of images
     Passed onto get_psd
@@ -488,14 +566,16 @@ def _get_psd_stack(
         crop the data into a square image with fewest non-zero pixels (Default value = True)
     N : int
         size to crop square (defaults to size of smaller side)
-    resolution :
+    resolution : float
         (Default value = 60.0)
-    freq0 :
+    freq0 : float
         (Default value = 1e-4)
-    density :
+    density : bool
         Normalize the PSD to be a density. Defaults to True.
         If True, output units will be (Amplitude^2) / (1 / (sampling units)^2)
         (Default value = False)
+    outname : str
+        Name of output file. If None, no output file is written.
 
     Returns
     -------
@@ -518,74 +598,10 @@ def _get_psd_stack(
         p0_hat_arr.append(p0_hat)
         beta_hat_list.append(beta_hat)
         psd1d_arr.append(psd1d)
-    return np.array(p0_hat_arr), beta_hat_list, freq, np.stack(psd1d_arr)
-
-
-def get_psd_blocks(
-    data, block_size=None, block_step=None, resolution=60.0, freq0=1e-4, deg=3
-):
-    """For one image, get radially averaged PSD from multiple blocks within image
-    Crops into subsets, calls `get_psd` on each
-
-    Parameters
-    ----------
-    data : 2D ndarray
-        displacement in m.
-    data : 2D ndarray
-        displacement in m.
-        resolution (float), spatial resolution of input data in meters
-    block_size : float
-        size of block side, in meters (Default value = None)
-    block_step : float
-        amount to shift the block window, in m (Default value = None)
-    block_step : float
-        amount to shift the block window, in m
-        freq0 (float), reference spatial freqency in cycle / m. (Default value = None)
-    resolution :
-        (Default value = 60.0)
-    freq0 :
-        (Default value = 1e-4)
-    deg :
-        (Default value = 3)
-
-    Returns
-    -------
-
-
-    """
-    nrow, ncol = data.shape
-    if block_size is None:
-        block_pix = min(nrow, ncol) // 2
-    else:
-        block_pix = int(block_size / resolution)
-    if block_step is None:
-        step = min(nrow, ncol) // 4
-    else:
-        step = int(block_step / resolution)
-
-    p0_hat_arr, beta_hat_list, psd1d_arr = [], [], []
-    freq = None
-    row, col = 0, 0
-    while row + block_pix - 1 < data.shape[0]:
-        while col + block_pix - 1 < data.shape[1]:
-            # print(row, col, block_size, block_pix, block_step, step)
-            block = data[row : row + block_pix, col : col + block_pix]
-            if block.shape != (block_pix, block_pix):
-                continue
-            p0_hat, beta_hat, freq, psd1d = get_psd(
-                block,
-                resolution=resolution,
-                freq0=freq0,
-                crop=False,
-                deg=deg,
-            )
-            p0_hat_arr.append(p0_hat)
-            beta_hat_list.append(beta_hat)
-            psd1d_arr.append(psd1d)
-            col += step
-        col = 0
-        row += step
-    return np.array(p0_hat_arr), np.array(beta_hat_list), freq, np.array(psd1d_arr)
+    p0_hat_arr, psd1d_arr = np.array(p0_hat_arr), np.stack(psd1d_arr)
+    if outname is not None:
+        save_psd(p0_hat_arr, beta_hat_list, freq, psd1d_arr, density, outname=outname)
+    return p0_hat_arr, beta_hat_list, freq, psd1d_arr
 
 
 def get_psd1d_from_p0_beta(p0, beta, resolution, freq0, N):
@@ -628,86 +644,7 @@ def get_psd1d_from_p0_beta(p0, beta, resolution, freq0, N):
         beta_poly = Polynomial(beta)
         logp = beta_poly(logk)
 
-    p = 10**logp
+    p = 10 ** logp
     k = k.flatten()
     return k, p
 
-
-def fractal_dimension(beta):
-    """Convert the beta slope to D, fractal dimension (D2 is from Hanssen Section 4.7"""
-    return (7.0 - beta + 1.0) / 2.0
-
-
-def debug(surf):
-    return (
-        f"min:{np.min(surf):.2g}, max:{np.max(surf):.2g}, "
-        f"ptp:{np.ptp(surf):.2g}, mean:{np.mean(surf):.2g}"
-    )
-
-
-def average_psd_azimuth(
-    psd2d=None, image=None, resolution=60.0, dTheta=30, r_min=0, r_max=np.inf
-):
-    """Get 1D power spectrum averaged by angular bin (azimuthal average)
-
-    Parameters
-    ----------
-    psd2d : ndarray
-        2D power spectral density, size (N, N)
-        non-square images sized (r, c) will use N = min(r, c) (Default value = None)
-    image : ndarray, optional
-        if psd2d=None, pass original image to transform
-        (Default value = None)
-    dTheta : float
-        spacing between angle bins, in degrees. default=30.
-    r_min : float
-        optional, to limit the radius where the averaging takes place,
-        pass a minimum radius (in pixels) (Default value = 0)
-    r_max : float
-        optional, maximum radius (in pixels) where the averaging takes place
-        (Default value = np.inf)
-    resolution :
-        (Default value = 60.0)
-
-    Returns
-    -------
-    angles : ndarray
-        angles in degrees from 0 to 180
-    psd1d : ndarray
-        1D power spectral density, size same as angles
-    """
-    if psd2d is None:
-        if image is None:
-            raise ValueError("need either psd, or pre-transformed image")
-        psd2d = get_psd2d(image, resolution=resolution)
-    theta = _get_theta_sectors(psd2d, dTheta, r_min=r_min, r_max=r_max)
-
-    # use all psd2d pixels with label 'theta' (0 to 180) between (r_min, r_max)
-    # psd is symmetric for real data
-    angles = np.arange(0, 180, int(round(dTheta)))
-    psd1d = ndimage.sum(psd2d, theta, index=angles)
-
-    # normalize each sector to the total sector power
-    psd1d /= np.sum(psd1d)
-
-    return angles, psd1d
-
-
-def _get_theta_sectors(psd2d, dTheta, r_min=0, r_max=np.inf):
-    """Helper to make a mask of azimuthal angles of image"""
-    h, w = psd2d.shape
-    hc, wc = h // 2, w // 2
-
-    # note that displaying PSD as image inverts Y axis
-    # create an array of integer angular slices of dTheta
-    Y, X = np.ogrid[0:h, 0:w]
-    theta = np.rad2deg(np.arctan2(-(Y - hc), (X - wc)))
-    theta = np.mod(theta + dTheta / 2 + 360, 360)
-    theta = dTheta * (theta // dTheta)
-    theta = theta.round().astype(np.int)
-
-    # mask below r_min and above r_max by setting to -999
-    R = np.hypot((Y - hc), (X - wc))
-    mask = np.logical_and(R >= r_min, R < r_max)
-    theta = np.where(mask, theta, np.nan)
-    return theta
