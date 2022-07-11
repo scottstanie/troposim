@@ -48,11 +48,10 @@ from troposim.turbulence import Psd
 psd = Psd.from_image(noise)
 new_noise = psd.simulate()
 ```
-Here the `psd` object has the following attributes:
+Here the `psd` object has attributes
 - `p0`: the power at the reference frequency `freq0`
 - `beta`: a numpy Polynomial which was fit to the log-log PSD
-
-The two attributes `psd.freq` and `psd.psd1d` are the radially averaged spectrum values. You can see these with the `.plot()` method.
+along with `psd1d`, which are the radially averaged spectrum values at the `psd.freq` frequencies. You can see these with the `.plot()` method.
 
 ```python
 # assuming maptlotlib is installed
@@ -67,7 +66,7 @@ plotting.plot_psd1d(freq, psd1d)
 
 To simulate a stack of new values, you can pass the estimated `p0` and `beta` back to `simulate`:
 ```python
-noise = turbulence.simulate(shape=(10, 400, 400), p0=p0, beta=beta)
+psd.simulate(shape=(10, 400, 400))
 ```
 Note that the default fit will use a cubic polynomial. 
 To request only a linear fit,
