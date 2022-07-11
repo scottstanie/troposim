@@ -321,10 +321,10 @@ class Psd:
 
         Examples
         --------
-        >>> from troposim.turbulence import PSD
+        >>> from troposim.turbulence import Psd
         >>> import numpy as np
         >>> image = np.random.rand(100, 100)
-        >>> psd = Psd.from_image(image, resolution=60)
+        >>> psd = Psd.from_image(image, resolution=180)
         """
         if image.ndim > 2:
             return cls._get_psd_stack(
