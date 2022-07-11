@@ -1,6 +1,7 @@
+import numpy as np
 import pytest
-from numpy.testing import assert_allclose, assert_array_equal
 from numpy.polynomial import Polynomial
+from numpy.testing import assert_allclose, assert_array_equal
 
 from troposim import turbulence
 
@@ -38,13 +39,12 @@ def _beta_is_valid(beta, num_images):
 
 
 def test_standardize_beta():
-    from numpy import array
     assert _beta_is_valid(2.5, 1)
     assert _beta_is_valid(2.5, 3)
     assert _beta_is_valid(Polynomial([0, 2.5]), 1)
 
     assert _beta_is_valid([2.0, 2.5], 2)
-    assert _beta_is_valid(array([Polynomial([0, 2.5]), Polynomial([0, 2.5])]), 2)
+    assert _beta_is_valid(np.array([Polynomial([0, 2.5]), Polynomial([0, 2.5])]), 2)
 
     with pytest.raises(ValueError):
         # Wrong number of images requested
@@ -104,9 +104,9 @@ def test_load_save_psd(tmp_path):
     freq0 = 2.0e-3
     shape2d = (200, 200)
     out = turbulence.simulate(shape=shape2d, beta=b, freq0=freq0)
-    p0, beta, f, psd = turbulence.get_psd(out, freq0=freq0, deg=1, outname=fname)
+    p0, beta, f, psd = turbulence.get_psd(out, freq0=freq0, deg=1, filename=fname)
     p0_2, beta_2, f_2, psd_2 = turbulence.get_psd(
-        fname, freq0=freq0, deg=1, outname=fname
+        fname, freq0=freq0, deg=1, filename=fname
     )
     assert_allclose(p0, p0_2)
     assert_array_equal(beta, beta_2)  # polynomials, so need use assert_array_equal
@@ -119,7 +119,25 @@ def test_load_save_psd(tmp_path):
 
     out = turbulence.simulate(shape=shape3d, beta=beta_list, freq0=freq0)
 
-    p0, beta, f, psd = turbulence.get_psd(out, freq0=freq0, deg=3, outname=fname3d)
+    p0, beta, f, psd = turbulence.get_psd(out, freq0=freq0, deg=3, filename=fname3d)
     p0_2, beta_2, f_2, psd_2 = turbulence.get_psd(
-        fname, freq0=freq0, deg=1, outname=fname3d
+        fname, freq0=freq0, deg=1, filename=fname3d
     )
+
+
+def test_max_amp():
+    max_amp = 0.05  # meters
+    noise = turbulence.simulate(shape=(100, 100), max_amp=max_amp)
+    assert_allclose(np.max(noise), max_amp)
+    assert noise.shape == (100, 100)
+
+    noise3d = turbulence.simulate(shape=(3, 100, 100), max_amp=max_amp)
+    assert noise3d.shape == (3, 100, 100)
+    assert_allclose(np.max(noise3d, axis=(1, 2)), max_amp)
+
+
+def test_resolution_freq_change():
+    N = 200
+    res = 60
+    assert res == turbulence._resolution_from_freqs(turbulence._get_freqs(N, res))
+    
