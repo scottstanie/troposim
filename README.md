@@ -55,3 +55,9 @@ To request only a linear fit,
 ```python
 turbulence.get_psd(noise, deg=1)
 ```
+
+You can also save the PSD parameters for later use:
+```python
+p0, beta, freq, psd1d = turbulence.get_psd(noise, outfile="my_psd.npz")
+```
+Next time you call `turbulence.get_psd(noise, outfile="my_psd.npz")`, it will just load the saved parameters.

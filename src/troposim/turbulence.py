@@ -178,6 +178,8 @@ def get_psd(
         Units are m^2 / (1/m^2)
 
     """
+    if not str(outname).endswith(".npz"):
+        outname = str(outname) + ".npz"
     if outname and Path(outname).exists():
         print(f"Loading PSD parameters from {outname}")
         p0_hat, beta_hat, freq, psd1d = load_psd(outname)
