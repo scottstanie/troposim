@@ -40,12 +40,12 @@ def plot_psd(
     freq=None,
     psd1d=None,
     freq0=1e-4,
+    resolution=None,
     axes=None,
     outfig=None,
     cmap=CMAP,
     color="k",
     label=None,
-    resolution=None,
     marker=None,
     in_mm=False,
     per_km=True,
@@ -56,25 +56,25 @@ def plot_psd(
 
     Parameters
     ----------
-    data :
-
-    freq :
-        (Default value = None)
-    psd1d :
-        (Default value = None)
-    freq0 :
-        (Default value = 1e-4)
-    axes :
-        (Default value = None)
-    outfig :
-        (Default value = None)
-    cmap :
-        (Default value = CMAP)
-    color :
-        (Default value = "k")
+    data : ndarray
+        Noise image to plot the PSD of
+    freq : ndarray, optional
+        Frequecny array to use for plot
+        if not passed, will be generated from the data
+    psd1d : ndarray
+        PSD to use for plot
+        if not passed, will be generated from the data
+    freq0 : float, default value = 1e-4
+        reference frequency line to plot, showing p0
+    resolution : float, optional
+        Resolution of data (if not passing freq + psd1d)
+    axes : matplotlib.axes.Axes
+    outfig : str
+        path to save the figure to
+    cmap : str, default value = RdBu_r
+    color : str, default value = "k"
+        Line color for plot
     label :
-        (Default value = None)
-    resolution :
         (Default value = None)
     marker :
         (Default value = None)

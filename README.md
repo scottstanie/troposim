@@ -41,6 +41,8 @@ The other two values can be used to plot the estimated PSD:
 ```python
 # assuming maptlotlib is installed
 from troposim import plotting 
+plotting.plot_psd(noise, freq=freq, psd1d=psd1d)
+# Or just the PSD plot, no image
 plotting.plot_psd1d(freq, psd1d)
 ```
 
