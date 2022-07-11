@@ -32,7 +32,7 @@ flatter_noise = turbulence.simulate(beta=2.2)
 Since real InSAR data typically have a power spectrum that is not a single slope, you can **estimate the spectrum from an image** and use that to simulate new data:
 ```python
 from troposim.turbulence import Psd
-psd = Psd.from_image(noise, freq0=1e-4)
+psd = Psd.from_image(noise)
 new_noise = psd.simulate()
 ```
 Here the `psd` object has the following attributes:
@@ -68,3 +68,8 @@ psd.save(outfile="my_psd.npz")
 # Later, reload from this file
 psd = Psd.load(outfile)
 ```
+
+
+## Citation
+
+TODO

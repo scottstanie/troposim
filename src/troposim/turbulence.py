@@ -21,6 +21,8 @@ from . import utils
 
 RNG = np.random.default_rng()
 
+# TODO: auto-pick a freq0? Shouldn't have to make people know
+# in advance
 
 def simulate(
     shape=(300, 300),
