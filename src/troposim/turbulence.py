@@ -249,7 +249,22 @@ def _resolution_from_freqs(freqs):
 
 
 class Psd:
-    """Class for representing a power spectral density."""
+    """Class for representing a power spectral density.
+
+    Attributes
+    ----------
+    p0 : ndarray
+        Estimated power at reference frequency.
+    beta : ndarray[np.Polynomial]
+        Estimated slope of PSD(s). Polynomial of degree `deg`.
+        one for each image passed (if a stack), but will
+        always return an array even for 1
+    freq : ndarray
+        Spatial frequencies in cycle / m.
+    psd1d : ndarray
+        1D power spectral density at each spatial frequency in `freq`.
+        Units are m^2 / (1/m^2)
+    """
 
     def __init__(
         self, p0=None, beta=None, freq=None, psd1d=None, freq0=None, shape=(300, 300)
@@ -270,7 +285,7 @@ class Psd:
         return simulate(
             shape=shape, beta=self.beta, p0=self.p0, freq0=self.freq0, **kwargs
         )
-    
+
     @classmethod
     def from_image(
         cls,
@@ -302,17 +317,7 @@ class Psd:
 
         Returns
         -------
-        p0_hat : ndarray
-            Estimated power at reference frequency.
-        beta_hat : ndarray[np.Polynomial]
-            Estimated slope of PSD(s). Polynomial of degree `deg`.
-            Returns one for each image passed (if a stack), but will
-            always return an array even for 1
-        freq : ndarray
-            Spatial frequencies in cycle / m.
-        psd1d : ndarray
-            1D power spectral density at each spatial frequency in `freq`.
-            Units are m^2 / (1/m^2)
+        Psd object
 
         Examples
         --------
@@ -340,10 +345,11 @@ class Psd:
         # calculate slopes from spectrum
         p0_hat, beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
         beta_hat = np.array([beta_hat])
-        return Psd(p0_hat, beta_hat, freq=freq, psd1d=psd1d)
+        return Psd(
+            p0_hat, beta_hat, freq=freq, psd1d=psd1d, freq0=freq0, shape=image.shape
+        )
 
-
-    def save_psd(self, filename="psd_params.npz", save_dir=None):
+    def save(self, filename="psd_params.npz", save_dir=None):
         """Save the PSD parameters to a file.
 
         Parameters
@@ -360,7 +366,7 @@ class Psd:
             save_dir = Path()
         save_name = save_dir / Path(filename)
 
-        beta_coeffs = [b.coef for b in self.beta_hat]
+        beta_coeffs = [b.coef for b in self.beta]
         np.savez(
             save_name,
             p0=self.p0,
@@ -581,7 +587,6 @@ class Psd:
         deg=3,
         crop=True,
         N=None,
-        filename=None,
     ):
         """Find the PSD estimates for a stack of images
         Passed onto get_psd
@@ -607,19 +612,16 @@ class Psd:
             (Default value = 60.0)
         freq0 : float
             (Default value = 1e-4)
-        filename : str
-            Name of output file. If None, no output file is written.
 
         Returns
         -------
-        Same as get_psd, but each item is an iterable of (p0_hat, beta_hat, freq, psd1d)
+        Psd object with iterables for p0, beta, and psd1d
         """
-        p0_hat_arr = []
-        beta_hat_arr = []
+        p0_arr = []
+        beta_arr = []
         psd1d_arr = []
-        freq = None
         for image in tqdm(stack):
-            p0_hat, beta_hat, freq, psd1d = cls.from_image(
+            psd = cls.from_image(
                 image,
                 resolution=resolution,
                 freq0=freq0,
@@ -627,16 +629,25 @@ class Psd:
                 crop=crop,
                 N=N,
             )
-            p0_hat_arr.append(p0_hat)
-            beta_hat_arr.append(beta_hat[0])
-            psd1d_arr.append(psd1d)
-        p0_hat_arr = np.array(p0_hat_arr)
-        beta_hat_arr = np.array(beta_hat_arr)
+            p0_arr.append(psd.p0)
+            beta_arr.append(psd.beta[0])
+            psd1d_arr.append(psd.psd1d)
+        p0_arr = np.array(p0_arr)
+        beta_arr = np.array(beta_arr)
         psd1d_arr = np.stack(psd1d_arr)
-        cls(p0_hat_arr, beta_hat_arr, freq, psd1d_arr)
+        return cls(
+            p0_arr, beta_arr, psd.freq, psd1d_arr, freq0=freq0, shape=image.shape
+        )
 
     def __repr__(self):
         return f"Psd(p0={self.p0}, beta={self.beta}, freq0={self.freq0})"
+
+    def __eq__(self, other):
+        a = np.allclose(self.p0, other.p0)
+        b = np.array_equal(self.beta, other.beta)
+        c = np.allclose(self.freq, other.freq)
+        d = np.allclose(self.psd1d, other.psd1d)
+        return a and b and c and d
 
     @classmethod
     def from_p0_beta(cls, p0, beta, resolution, shape, freq0=1e-4):
