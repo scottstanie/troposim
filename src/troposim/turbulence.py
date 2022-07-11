@@ -47,7 +47,7 @@ def simulate(
         (rows, cols), or (num_images, rows, cols) of output
         If passing 3D shape, will use same `beta` for all layers of output
         (Default value = (300, 300))
-    beta : float, ndarray[float], or array of polynomial coeffs,
+    beta : float, ndarray[float], ndarray[Polynomial], or array of polynomial coeffs,
         For scalar: power law exponent for the slope of radially averaged 2D spectrum
         Polynomial: result from fit of radially averaged log PSD vs log frequency
             (or, see result from `get_psd`)
@@ -279,10 +279,23 @@ def _standardize_beta(beta, num_images, verbose=False):
     2. a list/array of scalars, equal in length to `num_images`
     3. a 2d array of shape (num_images, deg+1) of polynomial coefficients
     """
+    # If Polynomials are passed, extract the coefficients to simplify later logic
+    if isinstance(beta, Polynomial):
+        beta = np.array([beta])
+    if (
+        isinstance(beta, np.ndarray)
+        and beta.ndim > 0
+        and isinstance(beta[0], Polynomial)
+    ):
+        beta = np.array([b.coef for b in beta])
+
+    # Make sure we now have just an array of coefficients
     try:
         beta = np.array(beta).astype(float)
     except TypeError:
-        raise ValueError(f"beta must be numeric coefficients: {beta}")
+        raise ValueError(
+            f"beta must be an array of Polynomials or numeric coefficients: {beta}"
+        )
 
     # 1. A single scalar means the linear slope used for all images
     if beta.ndim == 0:

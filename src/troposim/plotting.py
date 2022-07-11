@@ -57,7 +57,7 @@ def plot_psd(
     Parameters
     ----------
     data :
-        
+
     freq :
         (Default value = None)
     psd1d :
@@ -96,6 +96,9 @@ def plot_psd(
     """
     if freq is None or psd1d is None:
         from . import turbulence
+
+        if resolution is None:
+            raise ValueError("resolution must be specified if freq and psd1d are not")
 
         _, _, freq, psd1d = turbulence.get_psd(
             data,

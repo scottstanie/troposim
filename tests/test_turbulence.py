@@ -38,13 +38,19 @@ def _beta_is_valid(beta, num_images):
 
 
 def test_standardize_beta():
+    from numpy import array
     assert _beta_is_valid(2.5, 1)
     assert _beta_is_valid(2.5, 3)
+    assert _beta_is_valid(Polynomial([0, 2.5]), 1)
+
     assert _beta_is_valid([2.0, 2.5], 2)
+    assert _beta_is_valid(array([Polynomial([0, 2.5]), Polynomial([0, 2.5])]), 2)
+
     with pytest.raises(ValueError):
         # Wrong number of images requested
         _beta_is_valid([2.0, 2.5, 3.0, 3.0, 5], 2)
 
+    # Check that we can pass iterables of coefficients
     assert _beta_is_valid([[0.0, 2.0], [0, 2.5]], 2)
     # Test cubic polys too
     assert _beta_is_valid([[0.0, 1.0, 2.0, 3.0]], 2)
