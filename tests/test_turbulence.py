@@ -26,9 +26,10 @@ def test_get_psd():
     out = turbulence.simulate(shape=shape, beta=b, freq0=freq0, p0=p0)
     p0_hat, beta_hat, _, _ = turbulence.get_psd(out, freq0=freq0, deg=1)
 
-    tol = 0.1
-    assert abs(beta_hat.item().coef[1] - b) < tol
-    assert abs(p0_hat - p0) < tol
+    beta_tol = 0.15
+    assert abs(beta_hat.item().coef[1] - b) < beta_tol
+    p0_tol = 0.05
+    assert abs(p0_hat - p0) < p0_tol
 
 
 def _beta_is_valid(beta, num_images):
@@ -74,6 +75,12 @@ def test_beta_types():
     # Note that the slope will always be negative,
     # even though we allow user to pass positive sloeps
     bslope = -b
+    for bh in beta_hat_list:
+        assert abs(bh.coef[1] - bslope) < beta_tol
+
+    # Same thing, but manually specifying same b
+    out = turbulence.simulate(shape=shape3d, beta=[b, b, b, b], freq0=freq0)
+    _, beta_hat_list, _, _ = turbulence.get_psd(out, freq0=freq0, deg=1)
     for bh in beta_hat_list:
         assert abs(bh.coef[1] - bslope) < beta_tol
 

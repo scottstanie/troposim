@@ -75,7 +75,6 @@ def get_all_1d_psd_curves(
     max_date=None,
     freq0=1e-4,
     deg=3,
-    density=True,
     save_dir=".",
     load=True,
 ):
@@ -97,8 +96,6 @@ def get_all_1d_psd_curves(
         (Default value = 1e-4)
     deg :
         (Default value = 3)
-    density :
-        (Default value = True)
     load :
         (Default value = True)
     """
@@ -113,7 +110,6 @@ def get_all_1d_psd_curves(
         freq0=freq0,
         deg=deg,
         crop=True,
-        density=density,
     )
     beta_arr_coeffs = np.array([b.coef for b in beta_arr])
     beta_arr_mean = np.polynomial.Polynomial(np.mean(beta_arr_coeffs, axis=0))

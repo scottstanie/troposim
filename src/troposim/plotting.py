@@ -46,7 +46,6 @@ def plot_psd(
     color="k",
     label=None,
     resolution=None,
-    density=True,
     marker=None,
     in_mm=False,
     per_km=True,
@@ -77,8 +76,6 @@ def plot_psd(
         (Default value = None)
     resolution :
         (Default value = None)
-    density :
-        (Default value = True)
     marker :
         (Default value = None)
     in_mm :
@@ -104,7 +101,6 @@ def plot_psd(
             data,
             resolution=resolution,
             freq0=freq0,
-            density=density,
         )
 
     if axes is None:
@@ -127,7 +123,6 @@ def plot_psd(
         freq0=freq0,
         label=label,
         color=color,
-        density=density,
         marker=marker,
         per_km=per_km,
         in_mm=in_mm,
@@ -152,7 +147,6 @@ def plot_psd1d(
     color="k",
     linestyle="-",
     marker=None,
-    density=True,
     per_km=True,
     in_mm=False,
     slopes=[],
@@ -184,7 +178,7 @@ def plot_psd1d(
     # ax.set_xlabel("Wavenumber [cycle/km]")
     ax.set_xlabel(r"$k$ [cycle/km]")
     ylabel = "PSD "
-    ylabel += r"$[cm^2 / (1/m^2)]$" if density else r"$[cm^2]$"
+    ylabel += r"$[cm^2 / (1/m^2)]$"
     if per_km:
         ylabel = ylabel.replace("/m", "/km")
     if in_mm:

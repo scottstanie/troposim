@@ -18,8 +18,6 @@ class IgramMaker:
     repeat_interval_days: int = 12
     resolution: int = 400
     p0_default: float = 10.0
-    density: bool = True
-    # p0_default: float = 1e-4  # For density=False
     freq0: float = 1e-4
     sar_stack: np.ndarray = None
     to_cm: bool = True
@@ -123,7 +121,6 @@ class IgramMaker:
             freq0=self.freq0,
             resolution=self.resolution,
             distribution=self.distribution,
-            density=self.density,
             seed=seed,
         )
         if self.to_cm:
