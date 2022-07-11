@@ -639,8 +639,14 @@ class Psd:
             p0_arr, beta_arr, psd.freq, psd1d_arr, freq0=freq0, shape=image.shape
         )
 
+    def plot(self, idxs=0, ax=None, **kwargs):
+        from troposim import plotting
+
+        return plotting.plot_psd1d(self.freq, self.psd1d[idxs], ax=ax, **kwargs)
+
     def __repr__(self):
-        return f"Psd(p0={self.p0}, beta={self.beta}, freq0={self.freq0})"
+        with np.printoptions(precision=2):
+            return f"Psd(p0={self.p0}, beta={self.beta}, freq0={self.freq0})"
 
     def __eq__(self, other):
         a = np.allclose(self.p0, other.p0)
@@ -676,8 +682,7 @@ class Psd:
         freq = _get_freqs(N, resolution, positive=True, shift=True)
         freq0_idx = np.argmin(np.abs(freq - freq0))
 
-        logk = np.log10(freq)
-
+        # logk = np.log10(freq)
         # Make `beta` into an array of Polynomials
         beta = _standardize_beta(beta, 1)
 
