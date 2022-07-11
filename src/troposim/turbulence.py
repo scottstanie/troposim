@@ -11,12 +11,13 @@ Ramon Hanssen, May 2000, available in the following website:
 """
 from pathlib import Path
 import numpy as np
-from numpy.fft import fft2, fftfreq, fftshift, ifft2
 from numpy.polynomial.polynomial import Polynomial, polyval
+from scipy.fft import fft2, fftfreq, fftshift, ifft2
 from scipy import ndimage
 from tqdm import tqdm
 
 from . import utils
+
 
 RNG = np.random.default_rng()
 
@@ -24,7 +25,7 @@ RNG = np.random.default_rng()
 def simulate(
     shape=(300, 300),
     beta=2.5,
-    p0=1, # TODO
+    p0=1,  # TODO
     freq0=1e-4,
     psd1d=None,  # TODO
     freq=None,
@@ -93,21 +94,20 @@ def simulate(
         num_images = 1
         length, width = shape
 
-    # Start with the 2D PSD of white noise
+    # Start with the 2D PSD of white noise: flat amplitude, random phase
     rng = np.random.default_rng(seed) if seed is not None else RNG
     h = rng.uniform(size=shape)
-    H = fft2(h)
-    # TODO: random phase any quicker?
+    H = np.exp(1j * 2 * np.pi * h)
 
     # spatial frequencies for polynomial evaluation (units: cycles / m)
     fx = _get_freqs(width, resolution)
     fy = _get_freqs(length, resolution)
     # Broadcast 1D vectors to square: (N,1) + (1, N) = (N, N)
     f = np.sqrt(fy[:, np.newaxis] ** 2 + fx[np.newaxis, :] ** 2)
- 
+
     # Make `beta` into an array of Polynomials
     beta = _standardize_beta(beta, num_images, verbose=verbose)
-    # The power beta/2 is used because power ~ amplitude**2 
+    # The power beta/2 is used because power ~ amplitude**2
     # Using amplitude means we take sqrt( k**beta) = k**(beta/2)
     beta_amp = beta / 2
 
@@ -115,7 +115,7 @@ def simulate(
     # Note: the polyval is like doing P = k ** (beta), but allows cubic, etc.
     b_coeffs = np.array([b.coef for b in beta_amp])
     # places where f=0 will fail in log10
-    with np.errstate(invalid='ignore', divide='ignore'):
+    with np.errstate(invalid="ignore", divide="ignore"):
         logP = polyval(np.log10(f), b_coeffs.T)
 
     # create the envelope to shape the power of the white noise
@@ -126,7 +126,7 @@ def simulate(
     H_shaped = H * P
     # Make output zero mean by zeroing the top left (0 freq) element
     H_shaped[..., 0, 0] = 0.0
-    out = ifft2(H_shaped).real
+    out = ifft2(H_shaped, workers=-1).real
     # calculate the power spectral density of 1st realization so that we can scale
     p1 = get_psd(out, resolution=resolution, freq0=freq0)[0]
 
@@ -208,9 +208,7 @@ def get_psd(
             outname=outname,
         )
 
-    psd2d = get_psd2d(
-        image, shift=True, crop=crop, N=N, resolution=resolution
-    )
+    psd2d = get_psd2d(image, shift=True, crop=crop, N=N, resolution=resolution)
 
     # calculate the radially average spectrum
     # freq, psd1d = radial_average_spectrum(psd2d, resolution)
@@ -342,7 +340,7 @@ def get_psd2d(
     shift=True,
     crop=False,
     N=None,
-    resolution=60.,
+    resolution=60.0,
 ):
     """Calculate the 2d Power spectral density of and image/stack of images
 
