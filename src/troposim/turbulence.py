@@ -25,10 +25,8 @@ RNG = np.random.default_rng()
 def simulate(
     shape=(300, 300),
     beta=2.5,
-    p0=1,  # TODO
+    p0=10.0,
     freq0=1e-4,
-    psd1d=None,  # TODO
-    freq=None,
     resolution=60.0,
     seed=None,
     verbose=False,
@@ -49,25 +47,19 @@ def simulate(
         (rows, cols), or (num_images, rows, cols) of output
         If passing 3D shape, will use same `beta` for all layers of output
         (Default value = (300, 300))
-    beta : float, Polynomial, array of poly coeffs, or ndarray[Polynomial]
+    beta : float, ndarray[float], or array of polynomial coeffs,
         For scalar: power law exponent for the slope of radially averaged 2D spectrum
         Polynomial: result from fit of radially averaged log PSD vs log frequency
             (or, see result from `get_psd`)
-        array of Polynomials: one for each layer of output. Must match 3D shape.
+        array of poly: one for each layer of output. Must match 3D shape.
         (Default value = 2.5)
     p0 : float
         multiplier of power spectral density
-        Units are m^2 / (1/m^2) (Default value = TODO)
+        Units are m^2 / (1/m^2) (Default value = 10.0)
     freq0 (float), reference spatial freqency where `p0` defined), in cycle / m
         (default 1e-4, or 1 cycle/10 km)
     resolution : float
         spatial resolution of output pixels, in meters (Default value = 60.0)
-    psd1d : ndarray
-        1D power spectral density at each spatial frequency in `freq`.
-        Alternative to `beta` and `freq0`.
-    freq : ndarray
-        Spatial frequencies in cycle / m.
-        Alternative to passing `resolution`
     seed : int
         number to seed random numbers, for reproducible turbulence
         (Default value = None)
@@ -83,6 +75,7 @@ def simulate(
     --------
     >>> from troposim import turbulence
     >>> out = turbulence.simulate(shape=(200, 200), beta=2.5)
+    >>> # Stack of 4 images of 200x200 pixels, noise increasing in spatial scale
     >>> out = turbulence.simulate(shape=(4, 200, 200), beta=[2.0, 2.2, 2.7, 3.0])
     """
     if p0 is None or np.all(np.array(p0) == 0):
@@ -153,27 +146,19 @@ def get_psd(
     Parameters
     ----------
     image : 2D ndarray
-        displacement in m. (Default value = None)
-    image : 2D ndarray
-        displacement in m.
+        displacement in meters
     resolution : float
-        spatial resolution of input image in meters (Default value = None)
-    image : 2D ndarray
-        displacement in m.
-        resolution (float), spatial resolution of input image in meters
-        freq0 (float), reference spatial freqency in cycle / m. (Default value = None)
+        spatial resolution of input image in meters (Default value = 60)
+    freq0 : float
+        Reference spatial frequency in cycle / m. (Default value = 1e-4)
     deg : int
         degree of Polynomial to fit to PSD. default = 3, cubic
     crop : bool
         crop the image into a square image with fewest non-zero pixels
         (Default value = True)
-    resolution :
-        (Default value = 60.0)
-    freq0 : float
-        Reference spatial frequency in cycle / m. (Default value = 1e-4)
-        (Default value = 1e-4)
     N : int
-        Crop the image to a square with max size N
+        Crop the image to a square with max size N.
+        If None, will use the largest size that keeps the image square.
     outname : str, optional
         Save the PSD parameters to a file.
         If this name exists, the parameters will be loaded from the file.
@@ -194,6 +179,7 @@ def get_psd(
 
     """
     if outname and Path(outname).exists():
+        print(f"Loading PSD parameters from {outname}")
         p0_hat, beta_hat, freq, psd1d = load_psd(outname)
         return p0_hat, beta_hat, freq, psd1d
 
