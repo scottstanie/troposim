@@ -4,6 +4,19 @@ Simulate tropospheric noise for InSAR data
 
 ![](docs/example.jpg)
 
+## Installation
+
+```bash
+pip install troposim
+```
+
+To make an editable installation
+
+```bash
+git clone https://github.com/scottstanie/troposim && cd troposim
+pip install -e .
+```
+
 ## Usage
 
 To simulate one turbulence image, you can specify the shape:
