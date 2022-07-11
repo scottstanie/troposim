@@ -19,6 +19,7 @@ noise = turbulence.simulate(shape=(10, 500, 500))
 
 The `beta` argument is the slope of the log10(power) vs log10(frequency) graph.
 The default is to use a single linear slope of $\beta = 2.5$:
+
 $$
 P(f) = \frac{1}{f^\beta}
 $$
