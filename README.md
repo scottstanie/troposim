@@ -61,10 +61,10 @@ psd.plot()
 from troposim import plotting 
 plotting.plot_psd(noise, freq=freq, psd1d=psd1d)
 # Or just the PSD plot, no image
-plotting.plot_psd1d(freq, psd1d)
+plotting.plot_psd1d(psd.freq, psd.psd1d)
 ```
 
-To simulate a stack of new values, you can pass the estimated `p0` and `beta` back to `simulate`:
+To simulate a stack of new values from the PSD of one image, you simply pass in a new `shape` argument to `.simulate`:
 ```python
 psd.simulate(shape=(10, 400, 400))
 ```

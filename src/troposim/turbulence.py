@@ -657,6 +657,22 @@ class Psd:
         d = np.allclose(self.psd1d, other.psd1d)
         return a and b and c and d
 
+    def __add__(self, other):
+        if not isinstance(other, Psd):
+            raise TypeError("Can only add Psd objects")
+        if not self.shape == other.shape:
+            raise ValueError("Psd objects must have same shape")
+        if not np.allclose(self.freq, other.freq):
+            raise ValueError("Psd objects must have same frequency")
+        return Psd(
+            np.concatenate((self.p0, other.p0)),
+            np.concatenate((self.beta, other.beta)),
+            self.freq,
+            np.concatenate((self.psd1d, other.psd1d), axis=0),
+            freq0=self.freq0,
+            shape=self.shape,
+        )
+
     @classmethod
     def from_p0_beta(cls, p0, beta, resolution, shape, freq0=1e-4):
         """Reconstruct 1D power spectral density array from p0 and beta

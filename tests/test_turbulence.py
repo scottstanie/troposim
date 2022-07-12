@@ -16,6 +16,8 @@ def test_shapes():
     assert out.shape == (10, 10)
     out = turbulence.simulate(shape=(2, 10, 10), freq0=freq0)
     assert out.shape == (2, 10, 10)
+    out_rect = turbulence.simulate(shape=(3, 10, 20), freq0=freq0)
+    assert out_rect.shape == (3, 10, 20)
 
 
 def test_get_psd():
@@ -136,3 +138,19 @@ def test_resolution_freq_change():
     N = 200
     res = 60
     assert res == turbulence._resolution_from_freqs(turbulence._get_freqs(N, res))
+
+
+def test_add_psds():
+    noise3 = turbulence.simulate(shape=(3, 200, 200))
+    noise4 = turbulence.simulate(shape=(4, 200, 200))
+    psd3 = turbulence.Psd.from_image(noise3)
+    psd4 = turbulence.Psd.from_image(noise4)
+    psd7 = psd3 + psd4
+    assert psd7.p0.shape == (7,)
+    assert psd7.beta.shape == (7,)
+    assert psd7.freq.shape == (99,)
+    assert psd7.psd1d.shape == (7, 99)
+
+    psd5 = turbulence.Psd.from_image(turbulence.simulate(shape=(2, 300, 300)))
+    with pytest.raises(ValueError):
+        psd3 + psd5
