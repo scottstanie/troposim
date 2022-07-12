@@ -162,20 +162,26 @@ def test_resolution_freq_change():
     assert res == turbulence._resolution_from_freqs(turbulence._get_freqs(N, res))
 
 
-def test_add_psds():
-    noise3 = turbulence.simulate(shape=(3, 200, 200))
-    noise4 = turbulence.simulate(shape=(4, 200, 200))
-    psd3 = turbulence.Psd.from_image(noise3)
-    psd4 = turbulence.Psd.from_image(noise4)
-    psd7 = psd3 + psd4
-    assert psd7.p0.shape == (7,)
-    assert psd7.beta.shape == (7,)
-    assert psd7.freq.shape == (99,)
-    assert psd7.psd1d.shape == (7, 99)
+def test_append_psds():
+    noise = turbulence.simulate(shape=(200, 200))
+    noise2 = turbulence.simulate(shape=(200, 200))
+    
+    psd = turbulence.Psd.from_image(noise, resolution=60)
+    psd2 = turbulence.Psd.from_image(noise2, resolution=60)
+    assert len(psd) == len(psd2) == 1
+    psd.append(psd2)
+    assert len(psd) == 2
+    psd.append(psd)
+    assert len(psd) == 4
 
-    psd5 = turbulence.Psd.from_image(turbulence.simulate(shape=(2, 300, 300)))
+    assert psd.p0.shape == (4,)
+    assert psd.beta.shape == (4,)
+    assert psd.freq.shape == (99,)
+    assert psd.psd1d.shape == (4, 99)
+
+    psd_wrongshape = turbulence.Psd.from_image(turbulence.simulate(shape=(250, 250)))
     with pytest.raises(ValueError):
-        psd3 + psd5
+        psd.append(psd_wrongshape)
 
 
 def test_len_psds():
