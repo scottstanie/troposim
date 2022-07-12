@@ -26,7 +26,7 @@ RNG = np.random.default_rng()
 
 def simulate(
     shape=(300, 300),
-    beta=2.5,
+    beta=8 / 3,
     p0=10.0,
     freq0=1e-4,
     max_amp=None,
@@ -55,7 +55,7 @@ def simulate(
         Polynomial: result from fit of radially averaged log PSD vs log frequency
             (or, see result from `get_psd`)
         array of poly: one for each layer of output. Must match 3D shape.
-        (Default value = 2.5)
+        (Default value = 8/3)
     p0 : float
         Power level of PSD at the refernce freqency `freq0`
         Units are m^2 / (1/m^2) (Default value = 10.0)
@@ -82,7 +82,7 @@ def simulate(
     Examples
     --------
     >>> from troposim import turbulence
-    >>> out = turbulence.simulate(shape=(200, 200), beta=2.5)
+    >>> out = turbulence.simulate(shape=(200, 200), beta=8/3)
     >>> # Stack of 4 images of 200x200 pixels, noise increasing in spatial scale
     >>> out = turbulence.simulate(shape=(4, 200, 200), beta=[2.0, 2.2, 2.7, 3.0])
     """
@@ -120,7 +120,7 @@ def simulate(
         logP = polyval(np.log10(f), b_coeffs.T)
 
     # create the envelope to shape the power of the white noise
-    P = 10**logP
+    P = 10 ** logP
     # correct dividing by zero, paind in case simulating multiple images
     P[..., f == 0] = 1.0
 
@@ -348,7 +348,7 @@ class Psd:
         p0_hat, beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
         beta_hat = np.array([beta_hat])
         return Psd(
-            p0_hat, beta_hat, freq=freq, psd1d=psd1d, freq0=freq0, shape=image.shape
+            np.atleast_1d(p0_hat), beta_hat, freq=freq, psd1d=np.atleast_2d(psd1d), freq0=freq0, shape=image.shape
         )
 
     def save(self, filename="psd_params.npz", save_dir=None):
@@ -405,10 +405,6 @@ class Psd:
             shape = data.get("shape")
         # convert beta to array of polynomials
         beta = np.array([Polynomial(b) for b in beta])
-        try:
-            p0 = p0.item()  # if scalar, convert to float
-        except ValueError:
-            pass
 
         return cls(p0, beta, freq, psd1d, shape=shape)
 
@@ -456,7 +452,7 @@ class Psd:
 
         # Convert to density units (m^2 / (1/m^2), or (Amplitude^2) / (1 / (sampling units)^2))
         # Here the sampling units are meters, given by the resoltution
-        psd2d *= resolution**2
+        psd2d *= resolution ** 2
         # print(f"mult psd2d by {resolution**2:.1f}")
         # print(f"if in [km]: {(resolution/1000)**2:.1f}")
         # print(f"So dividing by Fs**2 leads to boost of {(1000/resolution)**2:.1f}")
@@ -638,7 +634,10 @@ class Psd:
                 )
             )
         # Reduce to a single PSD
-        return sum(psd_list[1:], start=psd_list[0])
+        psd = psd_list[0]
+        for p in psd_list[1:]:
+            psd.append(p)
+        return psd
 
     @classmethod
     def from_hdf5(
@@ -708,26 +707,39 @@ class Psd:
         d = np.allclose(self.psd1d, other.psd1d)
         return a and b and c and d
 
-    def __add__(self, other):
+    def _check_compatible(self, other):
         if not isinstance(other, Psd):
-            raise TypeError("Can only add Psd objects")
+            raise TypeError("Both objects must be `Psd` instances")
         if not self.freq0 == other.freq0:
             raise ValueError("Psd objects must have same freq0")
         if not self.shape == other.shape:
             raise ValueError("Psd objects must have same shape")
         if not np.allclose(self.freq, other.freq):
             raise ValueError("Psd objects must have same frequency")
-        # Concatenate each attribute which is a list
+        return True
+
+    def __add__(self, other):
+        self._check_compatible(other)
+        beta_avg = (self.beta + other.beta) / 2
+        # if not np.array_equal(self.beta, other.beta):
+        # raise ValueError("Psd objects must have same beta")
         return Psd(
-            np.concatenate((np.atleast_1d(self.p0), np.atleast_1d(other.p0))),
-            np.concatenate((self.beta, other.beta)),
+            self.p0 + other.p0,
+            beta_avg,
             self.freq,
-            # Make sure these are (num_images, num_freq) in shape
-            np.concatenate(
-                (np.atleast_2d(self.psd1d), np.atleast_2d(other.psd1d)), axis=0
-            ),
+            self.psd1d + other.psd1d,
             freq0=self.freq0,
             shape=self.shape,
+        )
+
+    def append(self, other):
+        self._check_compatible(other)
+        # Concatenate each attribute which is a list
+        self.p0 = np.concatenate((np.atleast_1d(self.p0), np.atleast_1d(other.p0)))
+        self.beta = np.concatenate((self.beta, other.beta))
+        # Make sure these are (num_images, num_freq) in shape
+        self.psd1d = np.concatenate(
+            (np.atleast_2d(self.psd1d), np.atleast_2d(other.psd1d)), axis=0
         )
 
     @classmethod
@@ -765,6 +777,6 @@ class Psd:
         b_coeffs = np.array([b.coef for b in beta])
         logp = polyval(np.log10(freq), b_coeffs.T)
 
-        psd1d = 10**logp
+        psd1d = 10 ** logp
         psd1d *= p0 / psd1d[freq0_idx]
         return cls(p0, beta, freq, psd1d, shape=shape, freq0=freq0)
