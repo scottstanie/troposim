@@ -162,6 +162,26 @@ def test_resolution_freq_change():
     assert res == turbulence._resolution_from_freqs(turbulence._get_freqs(N, res))
 
 
+def test_get_auto_freq0():
+    res = 100
+    noise = turbulence.simulate(shape=(200, 200), resolution=res)
+    psd = turbulence.Psd.from_image(noise, resolution=res)
+
+    assert psd._get_freq0(psd.freq, None) == 1e-4
+    assert psd._get_freq0(psd.freq, 1e-4) == 1e-4
+    assert psd._get_freq0(psd.freq, 1e-3) == 1e-3
+    with pytest.raises(ValueError):
+        assert psd._get_freq0(psd.freq, 1e-6)  # too small
+        assert psd._get_freq0(psd.freq, 1)  # too big
+
+    # Check the auto-picking for a small image
+    noise = turbulence.simulate(shape=(50, 50), resolution=res, p0=1, freq0=1e-3)
+    psd = turbulence.Psd.from_image(noise, resolution=res)
+    assert psd._get_freq0(psd.freq, None) == 2e-4
+    psd = turbulence.Psd.from_image(noise[:25, :25], resolution=res)
+    assert psd._get_freq0(psd.freq, None) == 4e-4
+
+
 def test_append_psds():
     noise = turbulence.simulate(shape=(200, 200))
     noise2 = turbulence.simulate(shape=(200, 200))

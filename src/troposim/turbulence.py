@@ -21,15 +21,16 @@ from tqdm import tqdm
 from . import utils
 
 RNG = np.random.default_rng()
-
-# TODO: auto-pick a freq0? Shouldn't have to make people know
+# freq0 defined here so that Psd estimation can auto-pick if it's outside
+# the range of the PSD
+DEFAULT_FREQ0 = 1e-4
 
 
 def simulate(
     shape=(300, 300),
     beta=8 / 3,
     p0=10.0,
-    freq0=1e-4,
+    freq0=DEFAULT_FREQ0,
     max_amp=None,
     resolution=60.0,
     seed=None,
@@ -294,7 +295,7 @@ class Psd:
         cls,
         image,
         resolution=60.0,
-        freq0=1e-4,
+        freq0=None,
         deg=3,
         crop=True,
         N=None,
@@ -308,7 +309,10 @@ class Psd:
         resolution : float
             spatial resolution of input image in meters (Default value = 60)
         freq0 : float
-            Reference spatial frequency in cycle / m. (Default value = 1e-4)
+            Reference spatial frequency in cycle / m.
+            If not passed, default value = 1e-4, as long as it falls
+            within the possible range of the image.
+            If the image is too small, will divide by 2 until it fits.
         deg : int
             degree of Polynomial to fit to PSD. default = 3, cubic
         crop : bool
@@ -343,7 +347,8 @@ class Psd:
 
         # calculate the radially average spectrum
         # freq, psd1d = radial_average_spectrum(psd2d, resolution)
-        freq, psd1d = cls.average_radial(psd2d, resolution=resolution)
+        freq, psd1d = cls._average_radially(psd2d, resolution=resolution)
+        freq0 = cls._get_freq0(freq, freq0)
 
         # calculate slopes from spectrum
         p0_hat, beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
@@ -356,6 +361,29 @@ class Psd:
             freq0=freq0,
             shape=image.shape,
         )
+
+    @staticmethod
+    def _get_freq0(freq, freq0):
+        """Check that freq0 is in the range of the image"""
+        # If it's specified and incorrect, raise an error
+        if freq0 is not None:
+            if freq0 < np.min(freq) or freq0 > np.max(freq):
+                raise ValueError(
+                    f"{freq0 = } is out of range {np.min(freq):.2E}-{np.max(freq):.2E}."
+                )
+            else:
+                return freq0
+        # Otherwise, pick one for the user
+        # print("Finding suitable reference frequency")
+        if freq0 is None:
+            freq0 = DEFAULT_FREQ0
+        # For smaller images, 1e-4 might be too small, so try increasing
+        pos_freqs = freq[freq > 0]
+        while freq0 < np.min(pos_freqs):
+            freq0 *= 2
+        # and double check that we didn't overshoot somehow
+        freq0 = np.clip(freq0, np.min(pos_freqs), np.max(pos_freqs))
+        return freq0
 
     def save(self, filename="psd_params.npz", save_dir=None):
         """Save the PSD parameters to a file.
@@ -466,7 +494,7 @@ class Psd:
         return psd2d
 
     @classmethod
-    def average_radial(
+    def _average_radially(
         cls,
         psd2d,
         resolution=60.0,
@@ -593,7 +621,7 @@ class Psd:
         cls,
         stack,
         resolution=60.0,
-        freq0=1e-4,
+        freq0=None,
         deg=3,
         crop=True,
         N=None,
@@ -652,7 +680,7 @@ class Psd:
         hdf5_file,
         dataset,
         resolution,
-        freq0=1e-4,
+        freq0=None,
         deg=3,
         crop=True,
     ):
@@ -758,7 +786,7 @@ class Psd:
         )
 
     @classmethod
-    def from_p0_beta(cls, p0, beta, resolution, shape, freq0=1e-4):
+    def from_p0_beta(cls, p0, beta, resolution, shape, freq0=None):
         """Reconstruct 1D power spectral density array from p0 and beta
 
         Parameters
@@ -782,6 +810,7 @@ class Psd:
         # frequency for x-axis after FFT
         N = min(shape[-2:])
         freq = _get_freqs(N, resolution, positive=True, shift=True)
+        freq0 = cls._get_freq0(freq, freq0)
         freq0_idx = np.argmin(np.abs(freq - freq0))
 
         # logk = np.log10(freq)
