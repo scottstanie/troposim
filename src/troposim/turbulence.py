@@ -18,8 +18,26 @@ from scipy import ndimage
 from scipy.fft import fft2, fftfreq, fftshift, ifft2
 from tqdm import tqdm
 
+try:
+    from joblib import Parallel, delayed
+except ImportError:
+    print("joblib not found, parallel processing disabled.")
+    print("To install, run `pip install joblib`")
+    # Make dummy versions that do nothing, so the code doesn't change
+
+    def delayed(f):
+        return f
+
+    def Parallel(n_jobs=1):
+        def f(x):
+            return x
+
+        return f
+
+
 from . import utils
 
+MAX_WORKERS = 8
 RNG = np.random.default_rng()
 # freq0 defined here so that Psd estimation can auto-pick if it's outside
 # the range of the PSD
@@ -97,6 +115,28 @@ def simulate(
         num_images = 1
         length, width = shape
 
+    # Make `beta` into an array of Polynomials, with length = num_images
+    beta = _standardize_beta(beta, num_images, verbose=verbose)
+
+    if num_images > 1:
+        #  3D output, so make sure `p0` is an array of the correct length
+        if np.atleast_1d(p0).size == 1:
+            p0 = np.repeat(p0, num_images)
+        out_list = Parallel(n_jobs=MAX_WORKERS)(
+            delayed(simulate)(
+                shape=(length, width),
+                beta=beta[i],
+                p0=p0[i],
+                freq0=freq0,
+                max_amp=max_amp,
+                resolution=resolution,
+                seed=seed,  # TODO: Will this totally mess up the random?
+                verbose=verbose,
+            )
+            for i in range(num_images)
+        )
+        return np.stack(out_list)
+
     # Start with the 2D PSD of white noise: flat amplitude, random phase
     rng = np.random.default_rng(seed) if seed is not None else RNG
     h = rng.uniform(size=shape)
@@ -108,12 +148,9 @@ def simulate(
     # Broadcast 1D vectors to square: (N,1) + (1, N) = (N, N)
     f = np.sqrt(fy[:, np.newaxis] ** 2 + fx[np.newaxis, :] ** 2)
 
-    # Make `beta` into an array of Polynomials
-    beta = _standardize_beta(beta, num_images, verbose=verbose)
     # The power beta/2 is used because power ~ amplitude**2
     # Using amplitude means we take sqrt( k**beta) = k**(beta/2)
     beta_amp = beta / 2
-
     # Now evaluate each using the coefficients
     # Note: the polyval is like doing P = k ** (beta), but allows cubic, etc.
     b_coeffs = np.array([b.coef for b in beta_amp])
@@ -657,7 +694,8 @@ class Psd:
         Psd object with iterables for p0, beta, and psd1d
         """
         psd_list = []
-        for image in tqdm(stack):
+        show_progress = len(stack) > 3
+        for image in tqdm(stack, disable=not show_progress):
             psd_list.append(
                 cls.from_image(
                     image,
@@ -672,6 +710,8 @@ class Psd:
         psd = psd_list[0]
         for p in psd_list[1:]:
             psd.append(p)
+        # add the num_images to the psd object
+        psd.shape = (len(psd_list), *psd.shape)
         return psd
 
     @classmethod
