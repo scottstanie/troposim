@@ -34,6 +34,12 @@ def test_get_psd():
     p0_tol = 0.05
     assert abs(psd.p0 - p0) < p0_tol
 
+def test_zero_psd():
+    """ """
+    shape = (200, 200)
+    psd = turbulence.Psd.from_image(np.zeros(shape), deg=1)
+    psd = turbulence.Psd.from_image(np.zeros(shape), deg=3)
+
 
 def _beta_is_valid(beta, num_images):
     beta = turbulence._standardize_beta(beta, num_images)

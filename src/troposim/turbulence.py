@@ -548,20 +548,25 @@ class Psd:
             freq = freq[idx]
             psd = psd[idx]
 
+        if np.all(psd == 0.0):
+            print("Warning: All PSD values are zero")
+            beta_poly = Polynomial.fit(freq, psd, deg=deg, domain=[])
+            return 0.0, beta_poly
+
         # convert to log-log scale
-        logk = np.log10(freq)
+        logf = np.log10(freq)
         logp = np.log10(psd)
 
         # Ignore once it's flat at basically 0
         nonzero_idx = (np.abs(logp) > 1e-16) & np.isfinite(logp) & ~np.isnan(logp)
         logp = logp[nonzero_idx]
-        logk = logk[nonzero_idx]
+        logf = logf[nonzero_idx]
 
         # Note: domain=[] necessary to return expected typical power series coefficients
-        # Makes it equivalent to older `np.polyfit(logk, logp, deg=deg)`
+        # Makes it equivalent to older `np.polyfit(logf, logp, deg=deg)`
         # See https://github.com/numpy/numpy/issues/9533, https://stackoverflow.com/a/52339988
         # Reminder that fitting without domain=[] requires .convert() to remove affine map
-        beta_poly = Polynomial.fit(logk, logp, deg=deg, domain=[])
+        beta_poly = Polynomial.fit(logf, logp, deg=deg, domain=[])
         if verbose:
             print(f"Polyfit fit: {beta_poly}")
         # interpolate psd at reference frequency
