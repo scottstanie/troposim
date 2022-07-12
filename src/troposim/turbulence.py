@@ -619,11 +619,16 @@ class Psd:
         -------
         Psd object with iterables for p0, beta, and psd1d
         """
-        p0_arr = []
-        beta_arr = []
-        psd1d_arr = []
-        for image in tqdm(stack):
-            psd = cls.from_image(
+        psd = cls.from_image(
+            stack[0],
+            resolution=resolution,
+            freq0=freq0,
+            deg=deg,
+            crop=crop,
+            N=N,
+        )
+        for image in tqdm(stack[1:]):
+            psd += cls.from_image(
                 image,
                 resolution=resolution,
                 freq0=freq0,
@@ -631,15 +636,10 @@ class Psd:
                 crop=crop,
                 N=N,
             )
-            p0_arr.append(psd.p0)
-            beta_arr.append(psd.beta[0])
-            psd1d_arr.append(psd.psd1d)
-        p0_arr = np.array(p0_arr)
-        beta_arr = np.array(beta_arr)
-        psd1d_arr = np.stack(psd1d_arr)
-        return cls(
-            p0_arr, beta_arr, psd.freq, psd1d_arr, freq0=freq0, shape=image.shape
-        )
+        return psd
+        # return cls(
+        #     p0_arr, beta_arr, psd.freq, psd1d_arr, freq0=freq0, shape=image.shape
+        # )
 
     def plot(self, idxs=0, ax=None, **kwargs):
         from troposim import plotting
@@ -660,15 +660,19 @@ class Psd:
     def __add__(self, other):
         if not isinstance(other, Psd):
             raise TypeError("Can only add Psd objects")
+        if not self.freq0 == other.freq0:
+            raise ValueError("Psd objects must have same freq0")
         if not self.shape == other.shape:
             raise ValueError("Psd objects must have same shape")
         if not np.allclose(self.freq, other.freq):
             raise ValueError("Psd objects must have same frequency")
+        # Concatenate each attribute which is a list
         return Psd(
-            np.concatenate((self.p0, other.p0)),
+            np.concatenate((np.atleast_1d(self.p0), np.atleast_1d(other.p0))),
             np.concatenate((self.beta, other.beta)),
             self.freq,
-            np.concatenate((self.psd1d, other.psd1d), axis=0),
+            # Make sure these are (num_images, num_freq) in shape
+            np.concatenate((np.atleast_2d(self.psd1d), np.atleast_2d(other.psd1d)), axis=0),
             freq0=self.freq0,
             shape=self.shape,
         )
