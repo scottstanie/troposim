@@ -455,6 +455,7 @@ class Psd:
         psd2d = np.abs(fdata2d) ** 2 / (rows * cols)
 
         # Convert to density units (m^2 / (1/m^2), or (Amplitude^2) / (1 / (sampling units)^2))
+        # Here the sampling units are meters, given by the resoltution
         psd2d *= resolution**2
         # print(f"mult psd2d by {resolution**2:.1f}")
         # print(f"if in [km]: {(resolution/1000)**2:.1f}")
@@ -619,27 +620,49 @@ class Psd:
         -------
         Psd object with iterables for p0, beta, and psd1d
         """
-        psd = cls.from_image(
-            stack[0],
-            resolution=resolution,
-            freq0=freq0,
-            deg=deg,
-            crop=crop,
-            N=N,
-        )
-        for image in tqdm(stack[1:]):
-            psd += cls.from_image(
+        psd_list = []
+        for image in tqdm(stack):
+            psd_list.append(cls.from_image(
                 image,
                 resolution=resolution,
                 freq0=freq0,
                 deg=deg,
                 crop=crop,
                 N=N,
-            )
-        return psd
-        # return cls(
-        #     p0_arr, beta_arr, psd.freq, psd1d_arr, freq0=freq0, shape=image.shape
-        # )
+            ))
+        # Reduce to a single PSD
+        return sum(psd_list[1:], start=psd_list[0])
+
+    @classmethod
+    def from_hdf5(
+        cls,
+        hdf5_file,
+        dataset,
+        resolution,
+        freq0=1e-4,
+        deg=3,
+        crop=True,
+    ):
+        """Find the PSD of a stack of images saved in an HDF5 file
+
+        Parameters
+        ----------
+        h5_file : str
+            Name of HDF5 file
+        dataset : str
+            dataset within the HDF5 containing the images
+        resolution : float
+
+        Returns
+        -------
+        Psd object
+        """
+        import h5py
+        with h5py.File(hdf5_file, "r") as f:
+            dset = f[dataset]
+            return cls._get_psd_stack(dset, resolution, freq0=freq0, deg=deg, crop=crop)
+            # psds.append(cls._get_psd_stack(dset))
+            # stack = f[dataset][:] 
 
     def plot(self, idxs=0, ax=None, **kwargs):
         from troposim import plotting
@@ -672,7 +695,9 @@ class Psd:
             np.concatenate((self.beta, other.beta)),
             self.freq,
             # Make sure these are (num_images, num_freq) in shape
-            np.concatenate((np.atleast_2d(self.psd1d), np.atleast_2d(other.psd1d)), axis=0),
+            np.concatenate(
+                (np.atleast_2d(self.psd1d), np.atleast_2d(other.psd1d)), axis=0
+            ),
             freq0=self.freq0,
             shape=self.shape,
         )

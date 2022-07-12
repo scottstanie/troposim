@@ -154,3 +154,18 @@ def test_add_psds():
     psd5 = turbulence.Psd.from_image(turbulence.simulate(shape=(2, 300, 300)))
     with pytest.raises(ValueError):
         psd3 + psd5
+
+
+def test_from_hdf5(tmp_path):
+    import h5py
+
+    noise4 = turbulence.simulate(shape=(4, 200, 200))
+    fname = tmp_path / "test_psd.h5"
+    dset = "noise"
+    with h5py.File(fname, "w") as hf:
+        hf.create_dataset(dset, data=noise4)
+    psd4 = turbulence.Psd.from_hdf5(fname, dset, resolution=60)
+    assert psd4.p0.shape == (4,)
+    assert psd4.beta.shape == (4,)
+    assert psd4.freq.shape == (99,)
+    assert psd4.psd1d.shape == (4, 99)
