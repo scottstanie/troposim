@@ -128,6 +128,20 @@ def test_load_save_psd(tmp_path):
     #     fname, freq0=freq0, deg=1, filename=fname3d
     # )
 
+def test_from_hdf5(tmp_path):
+    import h5py
+
+    noise4 = turbulence.simulate(shape=(4, 200, 200))
+    fname = tmp_path / "test_psd.h5"
+    dset = "noise"
+    with h5py.File(fname, "w") as hf:
+        hf.create_dataset(dset, data=noise4)
+    psd4 = turbulence.Psd.from_hdf5(fname, dset, resolution=60)
+    assert psd4.p0.shape == (4,)
+    assert psd4.beta.shape == (4,)
+    assert psd4.freq.shape == (99,)
+    assert psd4.psd1d.shape == (4, 99)
+
 
 def test_max_amp():
     max_amp = 0.05  # meters
@@ -162,16 +176,22 @@ def test_add_psds():
         psd3 + psd5
 
 
-def test_from_hdf5(tmp_path):
-    import h5py
+def test_len_psds():
+    psd = turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
+    assert len(psd) == 5
 
-    noise4 = turbulence.simulate(shape=(4, 200, 200))
-    fname = tmp_path / "test_psd.h5"
-    dset = "noise"
-    with h5py.File(fname, "w") as hf:
-        hf.create_dataset(dset, data=noise4)
-    psd4 = turbulence.Psd.from_hdf5(fname, dset, resolution=60)
-    assert psd4.p0.shape == (4,)
-    assert psd4.beta.shape == (4,)
-    assert psd4.freq.shape == (99,)
-    assert psd4.psd1d.shape == (4, 99)
+def test_getitem():
+    psd = turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
+    n = 1
+    assert len(psd[0]) == n
+    assert psd[0].p0.shape == (n,)
+    assert psd[0].beta.shape == (n,)
+    assert psd[0].freq.shape == (99,)
+    assert psd[0].psd1d.shape == (n, 99)
+
+    n = 3
+    assert len(psd[:3]) == n
+    assert psd[:3].p0.shape == (n,)
+    assert psd[:3].beta.shape == (n,)
+    assert psd[:3].freq.shape == (99,)
+    assert psd[:3].psd1d.shape == (n, 99)

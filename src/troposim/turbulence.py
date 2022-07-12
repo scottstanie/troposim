@@ -685,13 +685,18 @@ class Psd:
         return len(self.p0)
 
     def __getitem__(self, idx):
-        if idx >= len(self):
-            raise IndexError(f"Index {idx} is out of range for Psd")
+        # This seems to mostly work.
+        p0 = self.p0[idx]
+        try:
+            num_images = len(p0)  # Don't know size until we slice it
+        except TypeError:  # p0 is a scalar
+            num_images = 1
+
         return Psd(
-            self.p0[idx],
-            self.beta[idx],
+            np.atleast_1d(p0),
+            _standardize_beta(self.beta[idx], num_images),
             self.freq,
-            self.psd1d[idx],
+            np.atleast_2d(self.psd1d[idx]),
             freq0=self.freq0,
             shape=self.shape,
         )
