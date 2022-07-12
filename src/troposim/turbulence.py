@@ -10,6 +10,7 @@ Ramon Hanssen, May 2000, available in the following website:
     http://doris.tudelft.nl/software/insarfractal.tar.gz
 """
 import copy
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -17,23 +18,6 @@ from numpy.polynomial.polynomial import Polynomial, polyval
 from scipy import ndimage
 from scipy.fft import fft2, fftfreq, fftshift, ifft2
 from tqdm import tqdm
-
-try:
-    from joblib import Parallel, delayed
-except ImportError:
-    print("joblib not found, parallel processing disabled.")
-    print("To install, run `pip install joblib`")
-    # Make dummy versions that do nothing, so the code doesn't change
-
-    def delayed(f):
-        return f
-
-    def Parallel(n_jobs=1):
-        def f(x):
-            return x
-
-        return f
-
 
 from . import utils
 
@@ -122,19 +106,25 @@ def simulate(
         #  3D output, so make sure `p0` is an array of the correct length
         if np.atleast_1d(p0).size == 1:
             p0 = np.repeat(p0, num_images)
-        out_list = Parallel(n_jobs=MAX_WORKERS)(
-            delayed(simulate)(
-                shape=(length, width),
-                beta=beta[i],
-                p0=p0[i],
-                freq0=freq0,
-                max_amp=max_amp,
-                resolution=resolution,
-                seed=seed,  # TODO: Will this totally mess up the random?
-                verbose=verbose,
-            )
-            for i in range(num_images)
-        )
+        out_list = [None for _ in range(num_images)] # initialize list of outputs
+        with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            future_to_idx_map = {
+                executor.submit(
+                    simulate,
+                    shape=(length, width),
+                    beta=beta[idx],
+                    p0=p0[idx],
+                    freq0=freq0,
+                    max_amp=max_amp,
+                    resolution=resolution,
+                    seed=seed,  # TODO: Will this totally mess up the random?
+                    verbose=verbose,
+                ): idx
+                for idx in range(num_images)
+            }
+            for fut in as_completed(future_to_idx_map):
+                idx = future_to_idx_map[fut]
+                out_list[idx] = fut.result()
         return np.stack(out_list)
 
     # Start with the 2D PSD of white noise: flat amplitude, random phase
