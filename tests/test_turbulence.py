@@ -228,3 +228,8 @@ def test_getitem():
 
 
 # TODO: something weird with a 0 one
+def test_zero_img():
+    out = turbulence.simulate(shape=(3, 100, 100), beta=[2.0, 2.7, 3.0], verbose=True, freq0=1e-3)
+    out[1] = 0
+    psd = turbulence.Psd.from_image(out)
+    psd.simulate()
