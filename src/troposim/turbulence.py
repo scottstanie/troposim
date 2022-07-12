@@ -153,19 +153,20 @@ def simulate(
     beta_amp = beta / 2
     # Now evaluate each using the coefficients
     # Note: the polyval is like doing P = k ** (beta), but allows cubic, etc.
-    b_coeffs = np.array([b.coef for b in beta_amp])
-    # places where f=0 will fail in log10
+    b_coeffs = beta_amp[0].coef
+    # OLD VERSION: b_coeffs = np.array([b.coef for b in beta_amp])  # for 3D eval
+    # places where f=0 throw warnings in log10
     with np.errstate(invalid="ignore", divide="ignore"):
         logP = polyval(np.log10(f), b_coeffs.T)
 
     # create the envelope to shape the power of the white noise
     P = 10**logP
-    # correct dividing by zero, paind in case simulating multiple images
-    P[..., f == 0] = 1.0
+    # correct dividing by zero
+    P[f == 0] = 1.0
 
     H_shaped = H * P
-    # Make output zero mean by zeroing the top left (0 freq) element
-    H_shaped[..., 0, 0] = 0.0
+    # Make output zero mean by zeroing the top left (0 freq,constant) element
+    H_shaped[0, 0] = 0.0
     out = ifft2(H_shaped, workers=-1).real
     # If passed the option of a maximum amplitude, use that and return
     return _scale_output(out, H_shaped, p0, freq0, resolution, max_amp)
@@ -235,22 +236,15 @@ def _standardize_beta(beta, num_images, verbose=False):
 
 
 def _scale_output(out, H_shaped, p0, freq0, resolution, max_amp):
-    num_images = len(out)
+    # Note that this will only be called for 2D cases at bottom of `simulate`
     if max_amp is not None:
-        if np.isscalar(max_amp):
-            max_amp = np.ones(num_images) * max_amp
-        max_amp = np.expand_dims(max_amp, axis=(-2, -1))
-        img_maxes = np.max(out, axis=(-2, -1), keepdims=True)
-        out *= max_amp / img_maxes
+        out *= max_amp / np.max(out)
     else:
         # Otherwise, calculate the power spectral density of 1st
         # realization so that we can scale
-        # psd = get_psd(out, resolution=resolution, freq0=freq0)[0]
         psd = Psd.from_image(out, resolution=resolution, freq0=freq0)
         norm_factor = np.sqrt(np.array(p0) / psd.p0)
-        # shape will be (num_images,), or () for 1 image case
-        # add the "expand_dims" for the 3D case to broadcast to (num_images, rows, cols)
-        H_shaped *= np.expand_dims(norm_factor, axis=(-2, -1))
+        H_shaped *= norm_factor
         out = ifft2(H_shaped).real
     return np.squeeze(out)
 
