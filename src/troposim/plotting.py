@@ -190,7 +190,7 @@ def plot_psd1d(
     # Plot the slopes, if passed, to compare to the PSD
     for slope in slopes:
         lines = freq ** slope
-        lines *= numer_scale / denom_scale * (psd1d[0] / lines[0])
+        lines *= numer_scale / denom_scale * (np.max(psd1d) / lines[0])
         ax.loglog(freq_plot, lines, color="k", linestyle="--")
     return ax
 

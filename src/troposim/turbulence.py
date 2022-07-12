@@ -9,6 +9,7 @@ which was a Python translation in MintPy of the matlab scripts written by
 Ramon Hanssen, May 2000, available in the following website:
     http://doris.tudelft.nl/software/insarfractal.tar.gz
 """
+import copy
 from pathlib import Path
 
 import numpy as np
@@ -120,7 +121,7 @@ def simulate(
         logP = polyval(np.log10(f), b_coeffs.T)
 
     # create the envelope to shape the power of the white noise
-    P = 10 ** logP
+    P = 10**logP
     # correct dividing by zero, paind in case simulating multiple images
     P[..., f == 0] = 1.0
 
@@ -348,7 +349,12 @@ class Psd:
         p0_hat, beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
         beta_hat = np.array([beta_hat])
         return Psd(
-            np.atleast_1d(p0_hat), beta_hat, freq=freq, psd1d=np.atleast_2d(psd1d), freq0=freq0, shape=image.shape
+            np.atleast_1d(p0_hat),
+            beta_hat,
+            freq=freq,
+            psd1d=np.atleast_2d(psd1d),
+            freq0=freq0,
+            shape=image.shape,
         )
 
     def save(self, filename="psd_params.npz", save_dir=None):
@@ -452,7 +458,7 @@ class Psd:
 
         # Convert to density units (m^2 / (1/m^2), or (Amplitude^2) / (1 / (sampling units)^2))
         # Here the sampling units are meters, given by the resoltution
-        psd2d *= resolution ** 2
+        psd2d *= resolution**2
         # print(f"mult psd2d by {resolution**2:.1f}")
         # print(f"if in [km]: {(resolution/1000)**2:.1f}")
         # print(f"So dividing by Fs**2 leads to boost of {(1000/resolution)**2:.1f}")
@@ -609,7 +615,8 @@ class Psd:
         deg : int
             degree of Polynomial to fit to PSD. default = 3, cubic
         crop : bool
-            crop the data into a square image with fewest non-zero pixels (Default value = True)
+            crop the data into a square image with fewest non-zero pixels
+            (Default value = True)
         N : int
             size to crop square (defaults to size of smaller side)
         resolution : float
@@ -671,10 +678,15 @@ class Psd:
             # psds.append(cls._get_psd_stack(dset))
             # stack = f[dataset][:]
 
-    def plot(self, idxs=0, ax=None, **kwargs):
+    def plot(self, idxs=None, ax=None, **kwargs):
         from troposim import plotting
 
-        return plotting.plot_psd1d(self.freq, self.psd1d[idxs], ax=ax, **kwargs)
+        if idxs is None:
+            idxs = slice(None)
+        if "color" not in kwargs:
+            kwargs["color"] = "grey" if len(self) > 1 else "black"
+
+        return plotting.plot_psd1d(self.freq, self.psd1d[idxs].T, ax=ax, **kwargs)
 
     def __repr__(self):
         with np.printoptions(precision=2):
@@ -732,6 +744,9 @@ class Psd:
             shape=self.shape,
         )
 
+    def copy(self, deep=True):
+        return copy.deepcopy(self) if deep else copy.copy(self)
+
     def append(self, other):
         self._check_compatible(other)
         # Concatenate each attribute which is a list
@@ -777,6 +792,6 @@ class Psd:
         b_coeffs = np.array([b.coef for b in beta])
         logp = polyval(np.log10(freq), b_coeffs.T)
 
-        psd1d = 10 ** logp
+        psd1d = 10**logp
         psd1d *= p0 / psd1d[freq0_idx]
         return cls(p0, beta, freq, psd1d, shape=shape, freq0=freq0)
