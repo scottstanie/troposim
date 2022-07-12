@@ -34,6 +34,7 @@ def test_get_psd():
     p0_tol = 0.05
     assert abs(psd.p0 - p0) < p0_tol
 
+
 def test_zero_psd():
     """ """
     shape = (200, 200)
@@ -128,6 +129,7 @@ def test_load_save_psd(tmp_path):
     #     fname, freq0=freq0, deg=1, filename=fname3d
     # )
 
+
 def test_from_hdf5(tmp_path):
     import h5py
 
@@ -180,6 +182,7 @@ def test_len_psds():
     psd = turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
     assert len(psd) == 5
 
+
 def test_getitem():
     psd = turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
     n = 1
@@ -190,8 +193,12 @@ def test_getitem():
     assert psd[0].psd1d.shape == (n, 99)
 
     n = 3
-    assert len(psd[:3]) == n
-    assert psd[:3].p0.shape == (n,)
-    assert psd[:3].beta.shape == (n,)
-    assert psd[:3].freq.shape == (99,)
-    assert psd[:3].psd1d.shape == (n, 99)
+    psd_slice = psd[:n]
+    assert len(psd_slice) == n
+    assert psd_slice.p0.shape == (n,)
+    assert psd_slice.beta.shape == (n,)
+    assert psd_slice.freq.shape == (99,)
+    assert psd_slice.psd1d.shape == (n, 99)
+
+
+# TODO: something weird with a 0 one
