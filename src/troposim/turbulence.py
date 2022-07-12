@@ -627,14 +627,16 @@ class Psd:
         """
         psd_list = []
         for image in tqdm(stack):
-            psd_list.append(cls.from_image(
-                image,
-                resolution=resolution,
-                freq0=freq0,
-                deg=deg,
-                crop=crop,
-                N=N,
-            ))
+            psd_list.append(
+                cls.from_image(
+                    image,
+                    resolution=resolution,
+                    freq0=freq0,
+                    deg=deg,
+                    crop=crop,
+                    N=N,
+                )
+            )
         # Reduce to a single PSD
         return sum(psd_list[1:], start=psd_list[0])
 
@@ -663,11 +665,12 @@ class Psd:
         Psd object
         """
         import h5py
+
         with h5py.File(hdf5_file, "r") as f:
             dset = f[dataset]
             return cls._get_psd_stack(dset, resolution, freq0=freq0, deg=deg, crop=crop)
             # psds.append(cls._get_psd_stack(dset))
-            # stack = f[dataset][:] 
+            # stack = f[dataset][:]
 
     def plot(self, idxs=0, ax=None, **kwargs):
         from troposim import plotting
@@ -677,6 +680,21 @@ class Psd:
     def __repr__(self):
         with np.printoptions(precision=2):
             return f"Psd(p0={self.p0}, beta={self.beta}, freq0={self.freq0})"
+
+    def __len__(self):
+        return len(self.p0)
+
+    def __getitem__(self, idx):
+        if idx >= len(self):
+            raise IndexError(f"Index {idx} is out of range for Psd")
+        return Psd(
+            self.p0[idx],
+            self.beta[idx],
+            self.freq,
+            self.psd1d[idx],
+            freq0=self.freq0,
+            shape=self.shape,
+        )
 
     def __eq__(self, other):
         a = np.allclose(self.p0, other.p0)
