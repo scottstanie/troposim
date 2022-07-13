@@ -14,6 +14,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
+from numpy.random import SeedSequence, default_rng
 from numpy.polynomial.polynomial import Polynomial, polyval
 from scipy import ndimage
 from scipy.fft import fft2, fftfreq, fftshift, ifft2
@@ -22,7 +23,7 @@ from tqdm import tqdm
 from . import utils
 
 MAX_WORKERS = 8
-RNG = np.random.default_rng()
+RNG = default_rng()
 # freq0 defined here so that Psd estimation can auto-pick if it's outside
 # the range of the PSD
 DEFAULT_FREQ0 = 1e-4
@@ -106,7 +107,11 @@ def simulate(
         #  3D output, so make sure `p0` is an array of the correct length
         if np.atleast_1d(p0).size == 1:
             p0 = np.repeat(p0, num_images)
-        out_list = [None for _ in range(num_images)] # initialize list of outputs
+        out_list = [None for _ in range(num_images)]  # initialize list of outputs
+        # https://numpy.org/devdocs/reference/random/parallel.html
+        ss = SeedSequence(seed)
+        child_seeds = ss.spawn(num_images)
+
         with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_idx_map = {
                 executor.submit(
@@ -117,12 +122,16 @@ def simulate(
                     freq0=freq0,
                     max_amp=max_amp,
                     resolution=resolution,
-                    seed=seed,  # TODO: Will this totally mess up the random?
+                    seed=child_seeds[idx],  # todo: how to make deterministic parallel?
                     verbose=verbose,
                 ): idx
                 for idx in range(num_images)
             }
-            for fut in as_completed(future_to_idx_map):
+            # Only show tqdm for longer simulations
+            skip_bar = (length * width * num_images) < 10e6
+            for fut in tqdm(
+                as_completed(future_to_idx_map), total=num_images, disable=skip_bar
+            ):
                 idx = future_to_idx_map[fut]
                 out_list[idx] = fut.result()
         return np.stack(out_list)
@@ -678,8 +687,8 @@ class Psd:
         Psd object with iterables for p0, beta, and psd1d
         """
         psd_list = []
-        show_progress = len(stack) > 3
-        for image in tqdm(stack, disable=not show_progress):
+        skip_progress_bar = len(stack) < 5
+        for image in tqdm(stack, disable=skip_progress_bar):
             psd_list.append(
                 cls.from_image(
                     image,
