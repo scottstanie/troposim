@@ -34,7 +34,7 @@ The `beta` argument is the slope of the log10(power) vs log10(frequency) graph.
 The default is to use a single linear slope of $\beta = 8 / 3$:
 
 $$
-P(f) = \frac{1}{f^\beta}
+P(f) \propto \frac{1}{f^\beta}
 $$
 
 For smaller-scale turbulence, you can use a different `beta`:
