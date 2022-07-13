@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - nodefaults
 dependencies:
-  - numpy>=1.21
   - python>=3.7
+  - numpy
   - scipy
   - tqdm

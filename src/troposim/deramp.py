@@ -29,9 +29,10 @@ def remove_ramp(z, deramp_order=1, mask=np.ma.nomask, copy=True, dtype=np.float3
     """
     if z.ndim > 2:
         if mask.ndim > 2:
+            errstr = f"mask and z must have same length: {len(mask)} != {len(z)}"
             assert len(mask) == len(
                 z
-            ), f"mask and z must have same length, but {len(mask) = } and {len(z) = }"
+            ), errstr
         else:
             mask = [mask] * len(z)
         return np.stack(

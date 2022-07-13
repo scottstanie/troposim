@@ -70,7 +70,7 @@ def make_stratified_delay(dem, K, h0=7000, alpha=1.4, zero_mean=True):
     K, h0, alpha = _get_param_sizes(K, h0, alpha)
 
     if np.any(h0 < dem.max()):
-        raise ValueError(f"{h0 = } must be higher than DEM")
+        raise ValueError(f"h0 = {h0} must be higher than DEM")
     dh = h0 - dem
     delay = K * dh**alpha
     if zero_mean:

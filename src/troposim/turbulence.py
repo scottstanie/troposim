@@ -203,7 +203,7 @@ def _standardize_beta(beta, num_images, verbose=False):
             # make sure the power slope is negative
             beta *= -1.0
             if verbose:
-                print(f"reversed sign on scalar slope: {beta = }")
+                print(f"reversed sign on scalar beta slope: {beta}")
         # Convert to linear polynomial
         beta = np.array([Polynomial([0, beta])])
         # beta = beta * np.ones(3)
@@ -227,10 +227,10 @@ def _standardize_beta(beta, num_images, verbose=False):
     if len(beta) == 1:
         beta = np.repeat(beta, num_images)
     if len(beta) != num_images:
-        raise ValueError(f"{len(beta) = } does not match {num_images = }")
+        raise ValueError(f"len(beta)={len(beta)} does not match num_images={num_images}")
 
     if verbose:
-        print(f"Simulation PSD polynomial: {beta = }")
+        print(f"Simulation PSD beta: {beta}")
     return beta
 
 
@@ -399,7 +399,7 @@ class Psd:
         if freq0 is not None:
             if freq0 < np.min(freq) or freq0 > np.max(freq):
                 raise ValueError(
-                    f"{freq0 = } is out of range {np.min(freq):.2E}-{np.max(freq):.2E}."
+                    f"freq0={freq0} is out of range {np.min(freq):.2E}-{np.max(freq):.2E}."
                 )
             else:
                 return freq0
@@ -643,7 +643,7 @@ class Psd:
         p0 = np.power(10, beta_poly(np.log10(freq0)))
 
         if verbose:
-            print(f"estimated {p0 = :.4g}")
+            print(f"estimated p0={p0:.4g}")
         return p0, beta_poly
 
     @classmethod

@@ -85,7 +85,7 @@ class IgramMaker:
                 )
             else:
                 beta = 8.0 / 3.0
-                print(f"Using {beta = :.3f}")
+            print(f"Using beta {beta :.3f}")
         self.beta = beta
 
         # Load/create the power random generator
@@ -99,7 +99,7 @@ class IgramMaker:
                 # Then load the params file
                 print(f"Loading p0 RV data from {p0_params}")
                 p0_params = np.load(p0_params)
-                print(f"{p0_params = }")
+                # print(f"{p0_params = }")
 
             if isinstance(p0_rv, str):
                 p0_frozen = getattr(stats, p0_rv)(**p0_params)
@@ -113,7 +113,7 @@ class IgramMaker:
                 self.p0_arr = np.repeat(self.p0_default, self.num_days)
 
         # Create the 3D stack of turbulence
-        print(f"{self.p0_arr[:5] = }")
+        # print(f"{self.p0_arr[:5] = }")
         sar_stack = turbulence.simulate(
             stack_shape,
             beta=self.beta,

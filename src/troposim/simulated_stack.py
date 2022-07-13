@@ -252,7 +252,7 @@ def data_loader(
             strat_stack = utils.take_looks(strat_stack, *looks)
             turb_stack = utils.take_looks(turb_stack, *looks)
             decor_stack = utils.take_looks(decor_stack, *looks)
-        print(f"{defo_stack.shape = }")
+        print(f"Shape: {defo_stack.shape}")
 
     if normalize:
         c1 = np.max(np.abs(defo_stack))

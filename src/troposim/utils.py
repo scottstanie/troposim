@@ -408,9 +408,9 @@ def block_iterator(arr_shape, block_shape, overlaps=(0, 0), start_offsets=(0, 0)
 
     # Check we're not moving backwards with the overlap:
     if row_overlap >= height:
-        raise ValueError(f"{row_overlap = } must be less than {height = }")
+        raise ValueError(f"row_overlap {row_overlap} must be less than {height}")
     if col_overlap >= width:
-        raise ValueError(f"{col_overlap = } must be less than {width = }")
+        raise ValueError(f"col_overlap {col_overlap} must be less than {width}")
     while row_off < rows:
         while col_off < cols:
             row_end = min(row_off + height, rows)  # Dont yield something OOB
