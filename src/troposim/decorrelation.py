@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 
-def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
+def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05, show_progress=False):
     """Simulate decorrelation noise from a given coherence.
 
     Parameters
@@ -46,7 +46,7 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05):
     unique_cohs, counts = np.unique(coh_rounded, return_counts=True)
     # Get the PDF for each unique coherence
     _, pdfs = phase_pdf(unique_cohs, looks, nbins=nbins, phi0=0.0)
-    for pdf, coh, count in tqdm(zip(pdfs, unique_cohs, counts), total=len(unique_cohs)):
+    for pdf, coh, count in tqdm(zip(pdfs, unique_cohs, counts), total=len(unique_cohs), disable=not show_progress):
         # Simulate a number of noise samples equal to the 
         # number of pixels with this coherence
         samps = _sample_noise(phi_bins, pdf, size=count)
