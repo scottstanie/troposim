@@ -8,7 +8,7 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05, show_p
 
     Parameters
     ----------
-    coherence : int, ndarray
+    coherence : float, ndarray
         Coherence magnitude of phase noise. (Default value = None)
     looks : int
         Number of looks. (Default value = 1)
@@ -33,6 +33,8 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05, show_p
     Hanssen, 2001, Eq. 4.2.24
     (Derived by Barber, 1993, Lee et al., 1994, Joughin and Winebrenner, 1994)
     """
+    # Make sure it's an array of at least size 1 (no scalars)
+    coherence = np.atleast_1d(np.array(coherence))
     out = np.zeros(coherence.shape)
     # Get a truncated list, for a max of (1 / rounding_threshold) unique values
     coh_rounded = _round_to(np.atleast_1d(coherence), rounding_threshold)
@@ -64,7 +66,7 @@ def phase_pdf(coherence, looks, nbins=200, phi0=0.0):
 
     Parameters
     ----------
-    coherence : int, ndarray
+    coherence : float, ndarray
         Coherence magnitude of phase noise.
     looks : int
         Number of looks.
@@ -106,12 +108,12 @@ def _sample_noise(phi_bins, pdf, size=1):
 
     Parameters
     ----------
-    phi_bins :
-
+    phi_bins : ndarray
+        end points for the phase histogram bin values
     pdf : ndarray
-
+        probability density from `phase_pdf`
     size : int or tuple of ints, optional
-         (Default value = 1)
+        output size for number of samples to draw
 
     Returns
     -------
@@ -125,17 +127,5 @@ def _sample_noise(phi_bins, pdf, size=1):
 
 
 def _round_to(x, step):
-    """
-
-    Parameters
-    ----------
-    x :
-
-    step :
-
-
-    Returns
-    -------
-
-    """
+    """Round `x` to the nearest `step`"""
     return step * np.round(x / step)
