@@ -3,7 +3,9 @@ import numpy as np
 from tqdm import tqdm
 
 
-def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05, show_progress=False):
+def simulate(
+    coherence=None, looks=1, nbins=200, rounding_threshold=0.05, show_progress=False
+):
     """Simulate decorrelation noise from a given coherence.
 
     Parameters
@@ -48,8 +50,12 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05, show_p
     unique_cohs, counts = np.unique(coh_rounded, return_counts=True)
     # Get the PDF for each unique coherence
     _, pdfs = phase_pdf(unique_cohs, looks, nbins=nbins, phi0=0.0)
-    for pdf, coh, count in tqdm(zip(pdfs, unique_cohs, counts), total=len(unique_cohs), disable=not show_progress):
-        # Simulate a number of noise samples equal to the 
+    for pdf, coh, count in tqdm(
+        zip(pdfs, unique_cohs, counts),
+        total=len(unique_cohs),
+        disable=not show_progress,
+    ):
+        # Simulate a number of noise samples equal to the
         # number of pixels with this coherence
         samps = _sample_noise(phi_bins, pdf, size=count)
         # Insert these at the appropriate locations in the output array
@@ -59,7 +65,7 @@ def simulate(coherence=None, looks=1, nbins=200, rounding_threshold=0.05, show_p
 
 
 def phase_pdf(coherence, looks, nbins=200, phi0=0.0):
-    """Compute the PDF of decorrleation phase noise for a given number of looks.
+    """Compute the PDF of decorrelation phase noise for a given number of looks.
 
     Uses Eq. 4.2.24 from Hanssen, 2001, using the expression derived in
     Barber (1993), Lee et al. (1994), and Joughin and Winebrenner (1994)

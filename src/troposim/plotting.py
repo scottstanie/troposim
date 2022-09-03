@@ -187,11 +187,13 @@ def plot_psd1d(
     if in_mm:
         ylabel = ylabel.replace("cm", "mm")
     ax.set_ylabel(ylabel)
-    # Plot the slopes, if passed, to compare to the PSD
+    # If passed, plot the slopes to compare to the PSD
     for slope in slopes:
+        slope_color = "orange"
         lines = freq ** slope
         lines *= numer_scale / denom_scale * (np.max(psd1d) / lines[0])
-        ax.loglog(freq_plot, lines, color="k", linestyle="--")
+        ax.loglog(freq_plot, .1 * lines, color=slope_color, linestyle="--")
+        ax.loglog(freq_plot, 30 * lines, color=slope_color, linestyle="--")
     return ax
 
 
