@@ -18,7 +18,7 @@ class IgramMaker:
 
     psd_stack: turbulence.PsdStack
     num_days: int = 10
-    shape: Optional[Tuple[int]] = None
+    shape: Optional[Tuple[int, int]] = None
     randomize: bool = True
     # resolution: int = 400
     # p0_default: float = 10.0
