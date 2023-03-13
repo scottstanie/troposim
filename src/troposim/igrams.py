@@ -14,10 +14,12 @@ logger = get_log(__name__)
 
 @dataclass
 class IgramMaker:
-    """Class for creating synthetic interferograms """
-    psd_list: list[turbulence.Psd]
+    """Class for creating synthetic interferograms"""
+
+    psd_stack: turbulence.PsdStack
     num_days: int = 10
     shape: Optional[Tuple[int]] = (700, 700)
+    randomize: bool = True
     # resolution: int = 400
     # p0_default: float = 10.0
     # freq0: float = 1e-4
@@ -43,92 +45,13 @@ class IgramMaker:
 
     def make_sar_stack(
         self,
-        # beta=None,
-        # beta_arr=None,
-        # beta_savename=None,
-        # p0_params=None,
-        # p0_arr=None,
-        # p0_rv="lognorm",
-        # p0_rv=None,
         seed=None,
     ):
-        from scipy import stats
-
-        # Load/create the beta PSD slopes
-        # if beta_arr is not None and len(beta_arr):
-        #     beta = np.random.choice(beta_arr, size=(self.num_days,), replace=True)
-
-        if self.num_days != len(self.psd_list):
-            if len(self.psd_list) == 1:
-                psd_list = self.psd_list * self.num_days
-            else:
-                psd_list = np.random.choice(
-                    self.psd_list, size=(self.num_days,), replace=True
-                )
-        else:
-            psd_list = self.psd_list
-
-        if self.shape is None:
-            self.shape = psd_list[0].shape
-        stack_shape = (self.num_days, *self.shape)
-        # Load/create the powers from the list of PSDs
-        p0_arr = np.array([psd.p0 for psd in psd_list])
-
-        beta = np.array([psd.beta for psd in psd_list]).ravel()
-
-        freq0_arr = [psd.freq0 for psd in psd_list]
-        if set(freq0_arr) != {freq0_arr[0]}:
-            raise ValueError("All PSDs must have the same freq0")
-        freq0 = freq0_arr[0]
-    
-        resultion_arr = [psd.resolution for psd in psd_list]
-        if set(resultion_arr) != {resultion_arr[0]}:
-            raise ValueError("All PSDs must have the same resolution")
-        resolution = resultion_arr[0]
-
-        # if beta is None:
-        #     # if beta_savename is not None:
-        #     #     logger.debug(f"Loading beta polynomial from {beta_savename}")
-        #     #     beta = np.polynomial.Polynomial(
-        #     #         np.load(beta_savename, allow_pickle=True)
-        #     #     )
-        #     # else:
-        #     beta = 8.0 / 3.0
-        #     logger.debug(f"Using beta {beta :.3f}")
-        # self.beta = beta
-
-        # # Load/create the power random generator
-        # if p0_arr is not None and len(p0_arr):
-        #     self.p0_arr = np.random.choice(p0_arr, size=(self.num_days,), replace=True)
-        # else:
-        #     if isinstance(p0_params, str):
-        #         # get the 'lognorm' or 'expon' from the filename
-        #         if p0_rv is None:
-        #             p0_rv = p0_params.replace("params_", "").replace(".npy", "")
-        #         # Then load the params file
-        #         logger.debug(f"Loading p0 RV data from {p0_params}")
-        #         p0_params = np.load(p0_params)
-        #         # logger.debug(f"{p0_params = }")
-
-        #     if isinstance(p0_rv, str):
-        #         p0_frozen = getattr(stats, p0_rv)(**p0_params)
-        #         self.p0_arr = p0_frozen.rvs(self.num_days)
-        #     elif isinstance(p0_rv, stats.rv_continuous):
-        #         p0_frozen = p0_rv(**p0_params)
-        #         self.p0_arr = p0_frozen.rvs(self.num_days)
-        #     else:
-        #         # raise ValueError("Unknown p0_rv")
-        #         # TODO: make a sane default, same with p0_params
-        #         self.p0_arr = np.repeat(self.p0_default, self.num_days)
-
         # Create the 3D stack of turbulence
-        logger.debug(f"{p0_arr[:5] = }")
-        sar_stack = turbulence.simulate(
-            stack_shape,
-            beta=beta,
-            p0=p0_arr,
-            freq0=freq0,
-            resolution=resolution,
+        sar_stack = self.psd_stack.simulate(
+            num_days=self.num_days,
+            shape=self.shape,
+            randomize=self.randomize,
             seed=seed,
         )
         if self.to_cm:

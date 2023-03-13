@@ -205,29 +205,21 @@ def test_append_psds():
 
 
 @pytest.fixture
+def psd():
+    return turbulence.Psd.from_image(turbulence.simulate(shape=(200, 200)))
+
+
+@pytest.fixture
 def psd5():
     return turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
 
 
+def test_div(psd):
+    psd == ((psd + psd) / 2)
+
+
 def test_len_psds(psd5):
     assert len(psd5) == 5
-
-
-def test_getitem(psd5):
-    n = 1
-    assert len(psd5[0]) == n
-    assert psd5[0].p0.shape == (n,)
-    assert psd5[0].beta.shape == (n,)
-    assert psd5[0].freq.shape == (99,)
-    assert psd5[0].psd1d.shape == (n, 99)
-
-    n = 3
-    psd_slice = psd5[:n]
-    assert len(psd_slice) == n
-    assert psd_slice.p0.shape == (n,)
-    assert psd_slice.beta.shape == (n,)
-    assert psd_slice.freq.shape == (99,)
-    assert psd_slice.psd1d.shape == (n, 99)
 
 
 def test_dict_roundtrip(psd5):

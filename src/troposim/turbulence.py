@@ -336,7 +336,7 @@ class Psd:
         shape=(300, 300),
         freq0=None,
         freq=None,
-        # psd1d=None,
+        psd1d=None,
         # p0=None,
     ):
         self.beta = _standardize_beta(beta, 1)[0]
@@ -353,6 +353,10 @@ class Psd:
             self.resolution = resolution
 
         self.freq0 = freq0
+        if psd1d is not None:
+            self.psd1d = psd1d
+        else:
+            self.psd1d = self._eval_freq(self.freq, self.beta)
         # Note: these are all derived from the beta Polynomial,
         # so we don't need to store them
         # self.p0 = p0
@@ -368,10 +372,6 @@ class Psd:
         if not self.freq0:
             raise ValueError("freq0 must be set to calculate p0")
         return self._eval_freq(self.freq0, self.beta)
-
-    @property
-    def psd1d(self):
-        return self._eval_freq(self.freq, self.beta)
 
     def simulate(self, shape=None, **kwargs):
         """Simulate a power spectral density.
@@ -432,7 +432,7 @@ class Psd:
         >>> psd = Psd.from_image(image, resolution=180)
         """
         if image.ndim > 2:
-            return PsdStack._get_psd_stack(
+            return PsdStack.from_images(
                 image,
                 resolution=resolution,
                 freq0=freq0,
@@ -458,7 +458,7 @@ class Psd:
             resolution=resolution,
             shape=image.shape,
             # freq=freq,
-            # psd1d=np.atleast_2d(psd1d),
+            psd1d=psd1d,
             freq0=freq0,
         )
 
@@ -502,14 +502,13 @@ class Psd:
             save_dir = Path()
         save_name = save_dir / Path(filename)
 
-        beta_coeffs = [b.coef for b in self.beta]
         np.savez(
             save_name,
-            p0=self.p0,
-            beta=beta_coeffs,
-            freq=self.freq,
+            beta=[b.coef],
             psd1d=self.psd1d,
+            resolution=self.resolution,
             shape=self.shape,
+            freq0=self.freq0,
         )
         return save_name
 
@@ -532,17 +531,17 @@ class Psd:
             raise ValueError(f"PSD parameter from {filename} does not exist")
 
         with np.load(filename) as data:
-            p0 = data["p0"]
             beta = data["beta"]
-            freq = data["freq"]
-            psd1d = data["psd1d"]
-            shape = data.get("shape")
-        # convert beta to array of polynomials
-        beta = np.array([Polynomial(b) for b in beta])
+            shape = data.get["shape"]
+            resolution = data["resolution"]
+            freq0 = data.get("freq0")
+            psd1d = data.get("psd1d")
 
-        return cls(p0, beta, freq, psd1d, shape=shape)
+        return cls(
+            beta=beta, resolution=resolution, shape=shape, freq0=freq0, psd1d=psd1d
+        )
 
-    def asdict(self) -> dict:
+    def asdict(self, include_psd1d=True) -> dict:
         """Save the PSD parameters to a dictionary.
 
         Returns
@@ -550,7 +549,7 @@ class Psd:
         dict
             Dictionary representation of the PSD parameters
         """
-        return {
+        d = {
             # "p0": self.p0.item(),
             "beta": self.beta[0].coef.tolist(),
             "shape": self.shape,
@@ -560,6 +559,9 @@ class Psd:
             # Freq can be found from the resolution, so don't save it
             # "freq": self.freq.tolist(),
         }
+        if include_psd1d and self.psd1d is not None:
+            d["psd1d"] = self.psd1d.ravel().tolist()
+        return d
 
     @classmethod
     def from_dict(cls, psd_dict: dict):
@@ -573,15 +575,15 @@ class Psd:
         -------
             new Psd object
         """
-        beta = np.array([Polynomial(psd_dict["beta"])])
+        beta = _standardize_beta(psd_dict["beta"])[0]
         # psd1d = np.array(psd_dict["psd1d"])
         shape = psd_dict["shape"]
         resolution = psd_dict["resolution"]
         freq0 = psd_dict.get("freq0")
-        return cls(beta=beta, shape=shape, resolution=resolution, freq0=freq0)
-        # return cls.from_p0_beta(
-        #     beta=beta, resolution=resolution, shape=shape, freq0=freq0
-        # )
+        psd1d = psd_dict.get("psd1d")
+        return cls(
+            beta=beta, shape=shape, resolution=resolution, freq0=freq0, psd1d=psd1d
+        )
 
     @staticmethod
     def _get_psd2d(
@@ -789,12 +791,11 @@ class Psd:
         with h5py.File(hdf5_file, "r") as f:
             dset = f[dataset]
             if dset.ndim == 3 and len(dset) > 1:
-                return PsdStack._get_psd_stack(
+                return PsdStack.from_images(
                     dset, resolution, freq0=freq0, deg=deg, crop=crop
                 )
             else:
                 return cls.from_image(dset, resolution, freq0=freq0, deg=deg, crop=crop)
-            # psds.append(cls._get_psd_stack(dset))
             # stack = f[dataset][:]
 
     def plot(self, idxs=None, ax=None, **kwargs):
@@ -803,7 +804,7 @@ class Psd:
         if idxs is None:
             idxs = slice(None)
         if "color" not in kwargs:
-            kwargs["color"] = "grey" if len(self) > 1 else "black"
+            kwargs["color"] = "black"
 
         return plotting.plot_psd1d(self.freq, self.psd1d[idxs].T, ax=ax, **kwargs)
 
@@ -812,10 +813,10 @@ class Psd:
         return self._to_str(poly_as_str=False)
 
     def __str__(self):
-        return self._to_str(poly_as_str=True)
+        return self._to_str(poly_as_str=True, precision=2)
 
-    def _to_str(self, poly_as_str: bool):
-        with np.printoptions(precision=2):
+    def _to_str(self, poly_as_str: bool, precision=None):
+        with np.printoptions(precision=precision):
             if poly_as_str:
                 beta_str = str(self.beta)
             else:
@@ -826,72 +827,76 @@ class Psd:
         s += ")"
         return s
 
-    def __len__(self):
-        return len(self.p0)
-
-    def __getitem__(self, idx):
-        # This seems to mostly work.
-        p0 = self.p0[idx]
-        try:
-            num_images = len(p0)  # Don't know size until we slice it
-        except TypeError:  # p0 is a scalar
-            num_images = 1
-
-        return Psd(
-            np.atleast_1d(p0),
-            _standardize_beta(self.beta[idx], num_images),
-            self.freq,
-            np.atleast_2d(self.psd1d[idx]),
-            freq0=self.freq0,
-            shape=self.shape,
-        )
-
     def __eq__(self, other):
         a = self.shape == other.shape
         b = np.array_equal(self.beta, other.beta)
         c = self.resolution == other.resolution
         return a and b and c
 
-    def _check_compatible(self, other):
+    def __add__(self, other):
+        self._assert_compatible(other)
+        return Psd(
+            beta=self.beta + other.beta,
+            freq0=self.freq0,
+            shape=self.shape,
+            resolution=self.resolution,
+        )
+
+    def __mul__(self, c):
+        if isinstance(c, (int, float)):
+            # Scalar multiplication
+            # Note: this is designed to match the result of multiplying the
+            # 1D PSD by a constant. The 1D PSD is a log-log curve, the beta
+            # polynomial gets changed 1) only in the constant term, and 2) by
+            # a factor of log10(c). The 1D PSD is then multiplied by c.
+            psd1d = self.psd1d * c if self.psd1d is not None else None
+            constant_factor = np.log10(c)
+            beta = self.beta.copy()
+            beta.coef[0] += constant_factor
+            return Psd(
+                beta=beta,
+                freq0=self.freq0,
+                shape=self.shape,
+                resolution=self.resolution,
+                psd1d=psd1d,
+            )
+        else:
+            raise TypeError("Multiplication only supported by scalar")
+
+    def __rmul__(self, c):
+        return self.__mul__(c)
+
+    # the div allows us to do (psd1 + psd2) / 2
+    def __truediv__(self, c):
+        if isinstance(c, (int, float)):
+            # See comment in __mul__ for explanation of this
+            psd1d = self.psd1d * c if self.psd1d is not None else None
+            constant_factor = np.log10(c)
+            beta = self.beta.copy()
+            beta.coef[0] -= constant_factor
+            return Psd(
+                beta=beta,
+                freq0=self.freq0,
+                shape=self.shape,
+                resolution=self.resolution,
+                psd1d=psd1d,
+            )
+        else:
+            raise TypeError("Division only supported by scalar")
+
+    def _assert_compatible(self, other):
         if not isinstance(other, Psd):
             raise TypeError("Both objects must be `Psd` instances")
         if not self.freq0 == other.freq0:
             raise ValueError("Psd objects must have same freq0")
         if not self.shape == other.shape:
             raise ValueError("Psd objects must have same shape")
-        if not np.allclose(self.freq, other.freq):
-            raise ValueError("Psd objects must have same frequency")
-        return True
-
-    def __add__(self, other):
-        self._check_compatible(other)
-        beta_avg = (self.beta + other.beta) / 2
-        # if not np.array_equal(self.beta, other.beta):
-        # raise ValueError("Psd objects must have same beta")
-        return Psd(
-            self.p0 + other.p0,
-            beta_avg,
-            self.freq,
-            self.psd1d + other.psd1d,
-            freq0=self.freq0,
-            shape=self.shape,
-        )
 
     def copy(self, deep=True):
         return copy.deepcopy(self) if deep else copy.copy(self)
 
-    def append(self, other):
-        self._check_compatible(other)
-        # Concatenate each attribute which is a list
-        self.p0 = np.concatenate((np.atleast_1d(self.p0), np.atleast_1d(other.p0)))
-        self.beta = np.concatenate((self.beta, other.beta))
-        # Make sure these are (num_images, num_freq) in shape
-        self.psd1d = np.concatenate(
-            (np.atleast_2d(self.psd1d), np.atleast_2d(other.psd1d)), axis=0
-        )
-
     @classmethod
-    def from_p0_beta(cls, p0, beta, resolution, shape, freq0=None):
+    def from_p0_beta(cls, p0, beta, resolution, shape, freq0):
         """Reconstruct 1D power spectral density array from p0 and beta
 
         Parameters
@@ -936,7 +941,7 @@ class PsdStack:
     psd_list: List[Psd]
 
     @classmethod
-    def _get_psd_stack(
+    def from_images(
         cls,
         stack,
         resolution=60.0,
@@ -945,8 +950,7 @@ class PsdStack:
         crop=True,
         N=None,
     ):
-        """Find the PSD estimates for a stack of images
-        Passed onto get_psd
+        """Find the PSD estimates for a stack of images.
 
         Parameters
         ----------
@@ -987,7 +991,9 @@ class PsdStack:
             )
         return cls(psd_list)
 
-    def simulate(self, **kwargs) -> np.ndarray:
+    def simulate(
+        self, num_days=None, shape=None, randomize=False, **kwargs
+    ) -> np.ndarray:
         """Simulate the stack of images from the PSD
 
         Returns
@@ -995,23 +1001,51 @@ class PsdStack:
         ndarray
             simulated stack of images
         """
+        if num_days is None:
+            num_days = self.shape[0]
+        if shape is None:
+            shape = self.shape[-2:]
+        stack_shape = (num_days,) + shape
+        if not randomize:
+            # if len(beta)=3 does not match num_images=50
+            if len(self.beta) > 1 and len(self.beta) != num_days:
+                raise ValueError(
+                    "Number of days must match number of beta values if randomize=False"
+                )
+            return simulate(
+                shape=stack_shape,
+                beta=self.beta,
+                resolution=self.resolution,
+                p0=self.p0,
+                freq0=self.freq0,
+                **kwargs,
+            )
+
+        # Now we need to randomize the PSDs with replacement
+        psd_list = self.psd_list
+        # if num_days > len(psd_list):
+        #     # pad the list with copies of itself if we need more
+        #     psd_list = psd_list * (num_days // len(psd_list) + 1)
+
+        psd_list = np.random.choice(psd_list, size=(num_days,), replace=True)
+        # Get a set of random indices with replacement
+        beta = np.array([psd.beta for psd in psd_list]).ravel()
+        p0_array = np.array([psd.p0 for psd in psd_list]).ravel()
+
         return simulate(
-            shape=self.shape,
-            beta=self.beta,
+            shape=stack_shape,
+            beta=beta,
             resolution=self.resolution,
-            p0=self.p0,
+            p0=p0_array,
             freq0=self.freq0,
             **kwargs,
         )
 
     def __init__(self, psd_list):
-        # check that all Psd objects have same shape
         if not all([psd.shape == psd_list[0].shape for psd in psd_list]):
             raise ValueError("All Psd objects must have same shape")
-        # check that all Psd objects have same resolution
         if not all([psd.resolution == psd_list[0].resolution for psd in psd_list]):
             raise ValueError("All Psd objects must have same resolution")
-        # check that all Psd objects have same freq0
         if not all([psd.freq0 == psd_list[0].freq0 for psd in psd_list]):
             raise ValueError("All Psd objects must have same freq0")
         self.psd_list = psd_list
@@ -1061,7 +1095,13 @@ class PsdStack:
         return (len(self.psd_list),) + self.psd_list[0].shape
 
     def __getitem__(self, idx):
-        return self.psd_list[idx]
+        p = self.psd_list[idx]
+        if isinstance(idx, int):
+            return p
+        return PsdStack(p)
+
+    def __setitem__(self, idx, value):
+        self.psd_list[idx] = value
 
     def __len__(self):
         return len(self.psd_list)
@@ -1077,3 +1117,13 @@ class PsdStack:
     @classmethod
     def fromdict(cls, d):
         return cls([Psd.fromdict(psd) for psd in d["psd_list"]])
+
+    def plot(self, idxs=None, ax=None, **kwargs):
+        from troposim import plotting
+
+        if idxs is None:
+            idxs = slice(None)
+        if "color" not in kwargs:
+            kwargs["color"] = "grey" if len(self) > 1 else "black"
+
+        return plotting.plot_psd1d(self.freq, self.psd1d[idxs].T, ax=ax, **kwargs)
