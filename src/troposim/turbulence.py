@@ -344,15 +344,13 @@ class Psd:
         if resolution is None and freq is None:
             raise ValueError("Must provide freqs or resolution")
         if freq is not None:
-            self.freq = freq
-            self.resolution = _resolution_from_freqs(freq)
+            resolution = _resolution_from_freqs(freq)
         else:
-            self.freq = _get_freqs(
-                min(shape[-2:]), resolution, positive=True, shift=True
-            )
-            self.resolution = resolution
+            freq = _get_freqs(min(shape[-2:]), resolution, positive=True, shift=True)
 
-        self.freq0 = freq0
+        self.resolution = resolution
+        self.freq = freq
+        self.freq0 = self._get_freq0(freq, freq0)
         if psd1d is not None:
             self.psd1d = psd1d
         else:
@@ -392,7 +390,7 @@ class Psd:
     def from_image(
         cls,
         image,
-        resolution=60.0,
+        resolution,
         freq0=None,
         deg=3,
         crop=True,
@@ -551,7 +549,7 @@ class Psd:
         """
         d = {
             # "p0": self.p0.item(),
-            "beta": self.beta[0].coef.tolist(),
+            "beta": [self.beta.coef.tolist()],  # list of lists, so it's (1, 4) not (4,)
             "shape": self.shape,
             "resolution": self.resolution,
             "freq0": self.freq0,
@@ -575,7 +573,7 @@ class Psd:
         -------
             new Psd object
         """
-        beta = _standardize_beta(psd_dict["beta"])[0]
+        beta = _standardize_beta(psd_dict["beta"], 1)[0]
         # psd1d = np.array(psd_dict["psd1d"])
         shape = psd_dict["shape"]
         resolution = psd_dict["resolution"]
@@ -827,6 +825,12 @@ class Psd:
         s += ")"
         return s
 
+    def __rich_repr__(self):
+        yield "beta", self.beta
+        yield "shape", self.shape
+        yield "resolution", self.resolution
+        yield "freq0", self.freq0
+
     def __eq__(self, other):
         a = self.shape == other.shape
         b = np.array_equal(self.beta, other.beta)
@@ -836,10 +840,11 @@ class Psd:
     def __add__(self, other):
         self._assert_compatible(other)
         return Psd(
-            beta=self.beta + other.beta,
-            freq0=self.freq0,
-            shape=self.shape,
+            beta=(self.beta + other.beta) / 2,  # average the beta polynomials
             resolution=self.resolution,
+            shape=self.shape,
+            freq0=self.freq0,
+            psd1d=self.psd1d + other.psd1d,
         )
 
     def __mul__(self, c):
@@ -855,9 +860,9 @@ class Psd:
             beta.coef[0] += constant_factor
             return Psd(
                 beta=beta,
-                freq0=self.freq0,
-                shape=self.shape,
                 resolution=self.resolution,
+                shape=self.shape,
+                freq0=self.freq0,
                 psd1d=psd1d,
             )
         else:
@@ -934,6 +939,8 @@ class Psd:
             resolution=resolution,
             shape=shape,
             freq0=freq0,
+            # Note: not including psd1d here because it came from beta evaluation,
+            # not from fitting.
         )
 
 
@@ -944,7 +951,7 @@ class PsdStack:
     def from_images(
         cls,
         stack,
-        resolution=60.0,
+        resolution,
         freq0=None,
         deg=3,
         crop=True,
@@ -1028,6 +1035,7 @@ class PsdStack:
         #     psd_list = psd_list * (num_days // len(psd_list) + 1)
 
         psd_list = np.random.choice(psd_list, size=(num_days,), replace=True)
+
         # Get a set of random indices with replacement
         beta = np.array([psd.beta for psd in psd_list]).ravel()
         p0_array = np.array([psd.p0 for psd in psd_list]).ravel()
@@ -1111,12 +1119,12 @@ class PsdStack:
             raise TypeError("Both objects must be `PsdStack` instances")
         return PsdStack(self.psd_list + other.psd_list)
 
-    def asdict(self):
-        return dict(psd_list=[psd.asdict() for psd in self.psd_list])
+    def asdict(self, include_psd1d=True):
+        return dict(psd_list=[psd.asdict(include_psd1d) for psd in self.psd_list])
 
     @classmethod
-    def fromdict(cls, d):
-        return cls([Psd.fromdict(psd) for psd in d["psd_list"]])
+    def from_dict(cls, d):
+        return cls([Psd.from_dict(psd) for psd in d["psd_list"]])
 
     def plot(self, idxs=None, ax=None, **kwargs):
         from troposim import plotting
