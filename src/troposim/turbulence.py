@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
-from numpy.random import SeedSequence, default_rng
 from numpy.polynomial.polynomial import Polynomial, polyval
+from numpy.random import SeedSequence, default_rng
 from scipy import ndimage
 from scipy.fft import fft2, fftfreq, fftshift, ifft2
 from tqdm.auto import tqdm
@@ -322,11 +322,11 @@ class Psd:
         Reference frequency in cycles / m, used to compute `p0`.
     freq : Optional[ndarray]
         Spatial frequencies in cycle / m.
-    p0 : ndarray
-        Estimated power at reference frequency.
     psd1d : ndarray
         1D power spectral density at each spatial frequency in `freq`.
         Units are m^2 / (1/m^2)
+    p0 : ndarray
+        Estimated power at reference frequency `freq0`.
     """
 
     def __init__(
@@ -337,7 +337,6 @@ class Psd:
         freq0=None,
         freq=None,
         psd1d=None,
-        # p0=None,
     ):
         self.beta = _standardize_beta(beta, 1)[0]
         self.shape = shape
@@ -352,13 +351,9 @@ class Psd:
         self.freq = freq
         self.freq0 = self._get_freq0(freq, freq0)
         if psd1d is not None:
-            self.psd1d = psd1d
+            self.psd1d = np.array(psd1d)
         else:
             self.psd1d = self._eval_freq(self.freq, self.beta)
-        # Note: these are all derived from the beta Polynomial,
-        # so we don't need to store them
-        # self.p0 = p0
-        # self.psd1d = psd1d
 
     @staticmethod
     def _eval_freq(freq, beta):
@@ -367,8 +362,6 @@ class Psd:
 
     @property
     def p0(self):
-        if not self.freq0:
-            raise ValueError("freq0 must be set to calculate p0")
         return self._eval_freq(self.freq0, self.beta)
 
     def simulate(self, shape=None, **kwargs):
@@ -420,7 +413,7 @@ class Psd:
 
         Returns
         -------
-        Psd object
+        Psd object, or PsdStack if image is 3D
 
         Examples
         --------
@@ -447,15 +440,12 @@ class Psd:
         freq0 = cls._get_freq0(freq, freq0)
 
         # calculate slopes from spectrum
-        # p0_hat, beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
-        beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
+        beta_hat = cls.fit_psd1d(freq, psd1d, deg=deg)
         beta_hat = np.array([beta_hat])
         return Psd(
-            # np.atleast_1d(p0_hat),
             beta=beta_hat,
             resolution=resolution,
             shape=image.shape,
-            # freq=freq,
             psd1d=psd1d,
             freq0=freq0,
         )
@@ -574,8 +564,7 @@ class Psd:
             new Psd object
         """
         beta = _standardize_beta(psd_dict["beta"], 1)[0]
-        # psd1d = np.array(psd_dict["psd1d"])
-        shape = psd_dict["shape"]
+        shape = tuple(psd_dict["shape"])
         resolution = psd_dict["resolution"]
         freq0 = psd_dict.get("freq0")
         psd1d = psd_dict.get("psd1d")
@@ -634,9 +623,8 @@ class Psd:
 
         return psd2d
 
-    @classmethod
+    @staticmethod
     def _average_radially(
-        cls,
         psd2d,
         resolution=60.0,
     ):
@@ -681,7 +669,7 @@ class Psd:
         return freq_pos, psd1d
 
     @staticmethod
-    def fit_psd1d(freq, psd, freq0=1e-4, deg=3, verbose=False):
+    def fit_psd1d(freq, psd, deg=3, verbose=False):
         """Fit the slope `beta` and p0 of a 1D PSD in loglog scale
         p = p0 * (freq/freq0)^(-beta)
 
@@ -698,8 +686,6 @@ class Psd:
             reference frequency in cycle / m
         deg : int
             degree of polynomial fit to log-log plot (default = 3, cubic)
-        freq0 : float
-            (Default value = 1e-4)
         verbose : bool
             (Default value = False)
 
@@ -742,23 +728,6 @@ class Psd:
             print(f"Polyfit fit: {beta_poly}")
 
         return beta_poly
-        # # interpolate psd at reference frequency
-        # if freq0 < freq[0] or freq0 > freq[-1]:
-        #     raise ValueError(
-        #         "input frequency of interest {} is out of range ({}, {})".format(
-        #             freq0, freq[0], freq[-1]
-        #         )
-        #     )
-        # # # Interpolate using only two nearest points:
-        # # logp0 = np.interp(np.log10(freq0), logk, logp)
-        # # p0 = np.power(10, logp0)
-        # # Use the fitted polynomial for smoother p0 estimate
-        # p0 = np.power(10, beta_poly(np.log10(freq0)))
-
-        # if verbose:
-        #     print(f"estimated p0={p0:.4g}")
-
-        # return p0, beta_poly
 
     @classmethod
     def from_hdf5(
@@ -933,11 +902,11 @@ class Psd:
         psd1d = cls._eval_freq(freq, beta)
         psd1d *= p0 / cls._eval_freq(freq0, beta)
 
-        beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=beta.degree())
+        beta_hat = cls.fit_psd1d(freq, psd1d, deg=beta.degree())
         return Psd(
             beta=beta_hat,
             resolution=resolution,
-            shape=shape,
+            shape=tuple(shape),
             freq0=freq0,
             # Note: not including psd1d here because it came from beta evaluation,
             # not from fitting.
@@ -1067,7 +1036,9 @@ class PsdStack:
         )
 
     def __rich_repr__(self):
-        yield "psd_list", self.psd_list
+        yield "psd_list", self.psd_list[:5]
+        if len(self.psd_list) > 5:
+            yield f"...({len(self.psd_list) - 5} more)"
 
     def __eq__(self, o: object) -> bool:
         if not isinstance(o, PsdStack):
