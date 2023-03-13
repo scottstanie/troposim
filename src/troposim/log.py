@@ -24,7 +24,7 @@ from logging import Formatter
 COLORS = False
 
 
-def get_log(debug=False, name=__file__, verbose=False):
+def get_log(name=__file__, debug=False, verbose=False):
     """Creates a nice log format for use across multiple files.
     
     Default logging level is INFO

@@ -72,20 +72,22 @@ def plot_psd(
     outfig : str
         path to save the figure to
     cmap : str, default value = RdBu_r
+        Colormap to use for image plot
     color : str, default value = "k"
         Line color for plot
-    label :
-        (Default value = None)
-    marker :
-        (Default value = None)
-    in_mm :
-        (Default value = False)
-    per_km :
-        (Default value = True)
-    slopes :
-        (Default value = [])
-    vm :
-        (Default value = None)
+    label : str, optional
+        Label for plot
+    marker : str, optional
+        Marker for plot
+    in_mm : bool, default value = False
+        If True, plot in mm instead of cm
+    per_km : bool, default value = True
+        If True, plot in units of 1/km instead of 1/m
+    slopes : list[float], default value = []
+        Linear slopes to plot on the PSD for reference
+    vm : float, optional
+        Max value for image plot
+
 
     Returns
     -------

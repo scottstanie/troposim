@@ -38,8 +38,8 @@ def test_get_psd():
 def test_zero_psd():
     """ """
     shape = (200, 200)
-    psd = turbulence.Psd.from_image(np.zeros(shape), deg=1)
-    psd = turbulence.Psd.from_image(np.zeros(shape), deg=3)
+    turbulence.Psd.from_image(np.zeros(shape), deg=1)
+    turbulence.Psd.from_image(np.zeros(shape), deg=3)
 
 
 def _beta_is_valid(beta, num_images):
@@ -185,7 +185,7 @@ def test_get_auto_freq0():
 def test_append_psds():
     noise = turbulence.simulate(shape=(200, 200))
     noise2 = turbulence.simulate(shape=(200, 200))
-    
+
     psd = turbulence.Psd.from_image(noise, resolution=60)
     psd2 = turbulence.Psd.from_image(noise2, resolution=60)
     assert len(psd) == len(psd2) == 1
@@ -204,22 +204,25 @@ def test_append_psds():
         psd.append(psd_wrongshape)
 
 
-def test_len_psds():
-    psd = turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
-    assert len(psd) == 5
+@pytest.fixture
+def psd5():
+    return turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
 
 
-def test_getitem():
-    psd = turbulence.Psd.from_image(turbulence.simulate(shape=(5, 200, 200)))
+def test_len_psds(psd5):
+    assert len(psd5) == 5
+
+
+def test_getitem(psd5):
     n = 1
-    assert len(psd[0]) == n
-    assert psd[0].p0.shape == (n,)
-    assert psd[0].beta.shape == (n,)
-    assert psd[0].freq.shape == (99,)
-    assert psd[0].psd1d.shape == (n, 99)
+    assert len(psd5[0]) == n
+    assert psd5[0].p0.shape == (n,)
+    assert psd5[0].beta.shape == (n,)
+    assert psd5[0].freq.shape == (99,)
+    assert psd5[0].psd1d.shape == (n, 99)
 
     n = 3
-    psd_slice = psd[:n]
+    psd_slice = psd5[:n]
     assert len(psd_slice) == n
     assert psd_slice.p0.shape == (n,)
     assert psd_slice.beta.shape == (n,)
@@ -227,9 +230,17 @@ def test_getitem():
     assert psd_slice.psd1d.shape == (n, 99)
 
 
+def test_dict_roundtrip(psd5):
+    psd_dict = psd5.asdict()
+    psd5b = turbulence.Psd.from_dict(psd_dict)
+    assert psd5 == psd5b
+
+
 # TODO: something weird with a 0 one
 def test_zero_img():
-    out = turbulence.simulate(shape=(3, 100, 100), beta=[2.0, 2.7, 3.0], verbose=True, freq0=1e-3)
+    out = turbulence.simulate(
+        shape=(3, 100, 100), beta=[2.0, 2.7, 3.0], verbose=True, freq0=1e-3
+    )
     out[1] = 0
     psd = turbulence.Psd.from_image(out)
     psd.simulate()

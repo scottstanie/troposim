@@ -25,42 +25,6 @@ def generate_stacks(
     stratified_kwargs={},
     deformation_kwargs={},
 ):
-    """
-
-    Parameters
-    ----------
-    demfile :
-        
-    outfile :
-        (Default value = "simulated_stack.h5")
-    dsets :
-        (Default value = ["defo")
-    "stratified" :
-        
-    "turbulence" :
-        
-    "decorrelation"] :
-        
-    num_days : int
-        (Default value = 9)
-    num_defos : int
-        (Default value = 120)
-    defo_shape : tuple[int, int]
-        (Default value = (200, 200))
-    add_day1_turbulence :
-        (Default value = False)
-    turbulence_kwargs :
-        (Default value = {})
-    stratified_kwargs :
-        (Default value = {})
-    deformation_kwargs :
-        (Default value = {})
-
-    Returns
-    -------
-    outfile : str
-        path to output file
-    """
     # SRTM DEM pixel spacing, in degrees
     res_30_degrees = 0.000277777777
 

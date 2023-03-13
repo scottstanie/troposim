@@ -12,13 +12,14 @@ Ramon Hanssen, May 2000, available in the following website:
 import copy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import List
 
 import numpy as np
 from numpy.random import SeedSequence, default_rng
 from numpy.polynomial.polynomial import Polynomial, polyval
 from scipy import ndimage
 from scipy.fft import fft2, fftfreq, fftshift, ifft2
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from . import utils
 
@@ -32,10 +33,10 @@ DEFAULT_FREQ0 = 1e-4
 def simulate(
     shape=(300, 300),
     beta=8 / 3,
+    resolution=60.0,
     p0=10.0,
     freq0=DEFAULT_FREQ0,
     max_amp=None,
-    resolution=60.0,
     seed=None,
     verbose=False,
 ):
@@ -61,17 +62,17 @@ def simulate(
             (or, see result from `get_psd`)
         array of poly: one for each layer of output. Must match 3D shape.
         (Default value = 8/3)
+    resolution : float
+        spatial resolution of output pixels, in meters (Default value = 60.0)
     p0 : float
-        Power level of PSD at the refernce freqency `freq0`
+        Power level of PSD at the refernce frequency `freq0`
         Units are m^2 / (1/m^2) (Default value = 10.0)
-    freq0 (float), reference spatial freqency where `p0` defined), in cycle / m
+    freq0 (float), reference spatial frequency where `p0` defined), in cycle / m
         (default 1e-4, or 1 cycle/10 km)
     max_amp : float or ndarray[float], optional
         maximum amplitude (in meters) of the simulated turbulence.
         Alternative to passing `p0` and `freq0`
         If passing an array, must match shape[0] of the stack
-    resolution : float
-        spatial resolution of output pixels, in meters (Default value = 60.0)
     seed : int
         number to seed random numbers, for reproducible turbulence
         (Default value = None)
@@ -91,7 +92,7 @@ def simulate(
     >>> # Stack of 4 images of 200x200 pixels, noise increasing in spatial scale
     >>> out = turbulence.simulate(shape=(4, 200, 200), beta=[2.0, 2.2, 2.7, 3.0])
     """
-    if p0 is None or np.all(np.array(p0) == 0):
+    if np.all(np.array(p0) == 0):
         return np.zeros(shape)
 
     try:
@@ -174,14 +175,31 @@ def simulate(
 def _standardize_beta(beta, num_images, verbose=False):
     """Get beta into an ndarray of Polynomials with length = num_images
 
-    Allowed options are
-    1. a single scalar, used as the linear slope
-    2. a list/array of scalars, equal in length to `num_images`
-    3. a 2d array of shape (num_images, deg+1) of polynomial coefficients
+    Parameters
+    ----------
+    beta : float or list or ndarray
+        Allowed options are
+        1. a single scalar, used as the linear slope
+        2. a list/array of scalars, equal in length to `num_images`, treated as
+                the linear slope for each image
+        3. a 2d array of shape (num_images, deg+1) of polynomial coefficients
+        4. a list/array of Polynomials, equal in length to `num_images`
+    num_images : int
+        number of images to simulate
+    verbose : bool
+        print extra debug info (Default value = False)
+
+    Returns
+    -------
+    ndarray
+        array of Polynomials, with length = num_images
+
     """
     # If Polynomials are passed, extract the coefficients to simplify later logic
     if isinstance(beta, Polynomial):
         beta = np.array([beta])
+    if isinstance(beta, list) and isinstance(beta[0], Polynomial):
+        beta = np.array([b.coef for b in beta])
     if (
         isinstance(beta, np.ndarray)
         and beta.ndim > 0
@@ -227,7 +245,9 @@ def _standardize_beta(beta, num_images, verbose=False):
     if len(beta) == 1:
         beta = np.repeat(beta, num_images)
     if len(beta) != num_images:
-        raise ValueError(f"len(beta)={len(beta)} does not match num_images={num_images}")
+        raise ValueError(
+            f"len(beta)={len(beta)} does not match num_images={num_images}"
+        )
 
     if verbose:
         print(f"Simulation PSD beta: {beta}")
@@ -287,28 +307,71 @@ class Psd:
 
     Attributes
     ----------
+    beta : Polynomial
+        Estimated slope of PSD(s).
+        Several options for input:
+        1. a single scalar, used as the linear slope
+        3. a 2d array of shape (1, deg+1) of polynomial coefficients
+        4. a numpy.polynomial.Polynomial
+        Each of these options will be converted to a Polynomial
+    resolution : float
+        Spatial resolution of image in meters.
+    shape : tuple
+        Shape of the image(s) that this PSD was calculated from.
+    freq0 : Optional[float]
+        Reference frequency in cycles / m, used to compute `p0`.
+    freq : Optional[ndarray]
+        Spatial frequencies in cycle / m.
     p0 : ndarray
         Estimated power at reference frequency.
-    beta : ndarray[np.Polynomial]
-        Estimated slope of PSD(s). Polynomial of degree `deg`.
-        one for each image passed (if a stack), but will
-        always return an array even for 1
-    freq : ndarray
-        Spatial frequencies in cycle / m.
     psd1d : ndarray
         1D power spectral density at each spatial frequency in `freq`.
         Units are m^2 / (1/m^2)
     """
 
     def __init__(
-        self, p0=None, beta=None, freq=None, psd1d=None, freq0=None, shape=(300, 300)
+        self,
+        beta=None,
+        resolution=None,
+        shape=(300, 300),
+        freq0=None,
+        freq=None,
+        # psd1d=None,
+        # p0=None,
     ):
-        self.p0 = p0
-        self.beta = beta
-        self.freq = freq
-        self.psd1d = psd1d
-        self.freq0 = freq0
+        self.beta = _standardize_beta(beta, 1)[0]
         self.shape = shape
+        if resolution is None and freq is None:
+            raise ValueError("Must provide freqs or resolution")
+        if freq is not None:
+            self.freq = freq
+            self.resolution = _resolution_from_freqs(freq)
+        else:
+            self.freq = _get_freqs(
+                min(shape[-2:]), resolution, positive=True, shift=True
+            )
+            self.resolution = resolution
+
+        self.freq0 = freq0
+        # Note: these are all derived from the beta Polynomial,
+        # so we don't need to store them
+        # self.p0 = p0
+        # self.psd1d = psd1d
+
+    @staticmethod
+    def _eval_freq(freq, beta):
+        """Evaluate the power spectral density at a given frequency"""
+        return np.power(10, beta(np.log10(freq)))
+
+    @property
+    def p0(self):
+        if not self.freq0:
+            raise ValueError("freq0 must be set to calculate p0")
+        return self._eval_freq(self.freq0, self.beta)
+
+    @property
+    def psd1d(self):
+        return self._eval_freq(self.freq, self.beta)
 
     def simulate(self, shape=None, **kwargs):
         """Simulate a power spectral density.
@@ -317,7 +380,12 @@ class Psd:
         if shape is None:
             shape = self.shape
         return simulate(
-            shape=shape, beta=self.beta, p0=self.p0, freq0=self.freq0, **kwargs
+            shape=shape,
+            beta=self.beta,
+            p0=self.p0,
+            freq0=self.freq0,
+            resolution=self.resolution,
+            **kwargs,
         )
 
     @classmethod
@@ -364,7 +432,7 @@ class Psd:
         >>> psd = Psd.from_image(image, resolution=180)
         """
         if image.ndim > 2:
-            return cls._get_psd_stack(
+            return PsdStack._get_psd_stack(
                 image,
                 resolution=resolution,
                 freq0=freq0,
@@ -381,15 +449,17 @@ class Psd:
         freq0 = cls._get_freq0(freq, freq0)
 
         # calculate slopes from spectrum
-        p0_hat, beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
+        # p0_hat, beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
+        beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=deg)
         beta_hat = np.array([beta_hat])
         return Psd(
-            np.atleast_1d(p0_hat),
-            beta_hat,
-            freq=freq,
-            psd1d=np.atleast_2d(psd1d),
-            freq0=freq0,
+            # np.atleast_1d(p0_hat),
+            beta=beta_hat,
+            resolution=resolution,
             shape=image.shape,
+            # freq=freq,
+            # psd1d=np.atleast_2d(psd1d),
+            freq0=freq0,
         )
 
     @staticmethod
@@ -471,6 +541,47 @@ class Psd:
         beta = np.array([Polynomial(b) for b in beta])
 
         return cls(p0, beta, freq, psd1d, shape=shape)
+
+    def asdict(self) -> dict:
+        """Save the PSD parameters to a dictionary.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of the PSD parameters
+        """
+        return {
+            # "p0": self.p0.item(),
+            "beta": self.beta[0].coef.tolist(),
+            "shape": self.shape,
+            "resolution": self.resolution,
+            "freq0": self.freq0,
+            # "psd1d": self.psd1d.ravel().tolist(),
+            # Freq can be found from the resolution, so don't save it
+            # "freq": self.freq.tolist(),
+        }
+
+    @classmethod
+    def from_dict(cls, psd_dict: dict):
+        """Load a saved PSD parameter file
+
+        Parameters
+        ----------
+            psd_dict (dict): Dictionary representation of the PSD parameters
+
+        Returns
+        -------
+            new Psd object
+        """
+        beta = np.array([Polynomial(psd_dict["beta"])])
+        # psd1d = np.array(psd_dict["psd1d"])
+        shape = psd_dict["shape"]
+        resolution = psd_dict["resolution"]
+        freq0 = psd_dict.get("freq0")
+        return cls(beta=beta, shape=shape, resolution=resolution, freq0=freq0)
+        # return cls.from_p0_beta(
+        #     beta=beta, resolution=resolution, shape=shape, freq0=freq0
+        # )
 
     @staticmethod
     def _get_psd2d(
@@ -584,7 +695,7 @@ class Psd:
         psd : 1D / 2D ndarray
             power spectral density
         freq0 : float
-            reference freqency in cycle / m
+            reference frequency in cycle / m
         deg : int
             degree of polynomial fit to log-log plot (default = 3, cubic)
         freq0 : float
@@ -629,83 +740,25 @@ class Psd:
         beta_poly = Polynomial.fit(logf, logp, deg=deg, domain=[])
         if verbose:
             print(f"Polyfit fit: {beta_poly}")
-        # interpolate psd at reference frequency
-        if freq0 < freq[0] or freq0 > freq[-1]:
-            raise ValueError(
-                "input frequency of interest {} is out of range ({}, {})".format(
-                    freq0, freq[0], freq[-1]
-                )
-            )
-        # # Interpolate using only two nearest points:
-        # logp0 = np.interp(np.log10(freq0), logk, logp)
-        # p0 = np.power(10, logp0)
-        # Use the fitted polynomial for smoother p0 estimate
-        p0 = np.power(10, beta_poly(np.log10(freq0)))
 
-        if verbose:
-            print(f"estimated p0={p0:.4g}")
-        return p0, beta_poly
+        return beta_poly
+        # # interpolate psd at reference frequency
+        # if freq0 < freq[0] or freq0 > freq[-1]:
+        #     raise ValueError(
+        #         "input frequency of interest {} is out of range ({}, {})".format(
+        #             freq0, freq[0], freq[-1]
+        #         )
+        #     )
+        # # # Interpolate using only two nearest points:
+        # # logp0 = np.interp(np.log10(freq0), logk, logp)
+        # # p0 = np.power(10, logp0)
+        # # Use the fitted polynomial for smoother p0 estimate
+        # p0 = np.power(10, beta_poly(np.log10(freq0)))
 
-    @classmethod
-    def _get_psd_stack(
-        cls,
-        stack,
-        resolution=60.0,
-        freq0=None,
-        deg=3,
-        crop=True,
-        N=None,
-    ):
-        """Find the PSD estimates for a stack of images
-        Passed onto get_psd
+        # if verbose:
+        #     print(f"estimated p0={p0:.4g}")
 
-        Parameters
-        ----------
-        stack : 3D ndarray
-            displacement in meters (num_images, rows, cols)
-        stack : 3D ndarray
-            displacement in meters (num_images, rows, cols)
-            resolution (float), spatial resolution of input data in meters
-        stack : 3D ndarray
-            displacement in meters (num_images, rows, cols)
-            resolution (float), spatial resolution of input data in meters
-            freq0 (float), reference spatial freqency in cycle / m.
-        deg : int
-            degree of Polynomial to fit to PSD. default = 3, cubic
-        crop : bool
-            crop the data into a square image with fewest non-zero pixels
-            (Default value = True)
-        N : int
-            size to crop square (defaults to size of smaller side)
-        resolution : float
-            (Default value = 60.0)
-        freq0 : float
-            (Default value = 1e-4)
-
-        Returns
-        -------
-        Psd object with iterables for p0, beta, and psd1d
-        """
-        psd_list = []
-        skip_progress_bar = len(stack) < 5
-        for image in tqdm(stack, disable=skip_progress_bar):
-            psd_list.append(
-                cls.from_image(
-                    image,
-                    resolution=resolution,
-                    freq0=freq0,
-                    deg=deg,
-                    crop=crop,
-                    N=N,
-                )
-            )
-        # Reduce to a single PSD
-        psd = psd_list[0]
-        for p in psd_list[1:]:
-            psd.append(p)
-        # add the num_images to the psd object
-        psd.shape = (len(psd_list), *psd.shape)
-        return psd
+        # return p0, beta_poly
 
     @classmethod
     def from_hdf5(
@@ -735,7 +788,12 @@ class Psd:
 
         with h5py.File(hdf5_file, "r") as f:
             dset = f[dataset]
-            return cls._get_psd_stack(dset, resolution, freq0=freq0, deg=deg, crop=crop)
+            if dset.ndim == 3 and len(dset) > 1:
+                return PsdStack._get_psd_stack(
+                    dset, resolution, freq0=freq0, deg=deg, crop=crop
+                )
+            else:
+                return cls.from_image(dset, resolution, freq0=freq0, deg=deg, crop=crop)
             # psds.append(cls._get_psd_stack(dset))
             # stack = f[dataset][:]
 
@@ -750,8 +808,23 @@ class Psd:
         return plotting.plot_psd1d(self.freq, self.psd1d[idxs].T, ax=ax, **kwargs)
 
     def __repr__(self):
+        # The repr version can be used to reconstruct the object
+        return self._to_str(poly_as_str=False)
+
+    def __str__(self):
+        return self._to_str(poly_as_str=True)
+
+    def _to_str(self, poly_as_str: bool):
         with np.printoptions(precision=2):
-            return f"Psd(p0={self.p0}, beta={self.beta}, freq0={self.freq0})"
+            if poly_as_str:
+                beta_str = str(self.beta)
+            else:
+                beta_str = repr(self.beta)
+        s = f"Psd(beta={beta_str}, shape={self.shape}, resolution={self.resolution}"
+        if self.freq0 is not None:
+            s += f", freq0={self.freq0}"
+        s += ")"
+        return s
 
     def __len__(self):
         return len(self.p0)
@@ -774,11 +847,10 @@ class Psd:
         )
 
     def __eq__(self, other):
-        a = np.allclose(self.p0, other.p0)
+        a = self.shape == other.shape
         b = np.array_equal(self.beta, other.beta)
-        c = np.allclose(self.freq, other.freq)
-        d = np.allclose(self.psd1d, other.psd1d)
-        return a and b and c and d
+        c = self.resolution == other.resolution
+        return a and b and c
 
     def _check_compatible(self, other):
         if not isinstance(other, Psd):
@@ -824,7 +896,7 @@ class Psd:
 
         Parameters
         ----------
-        psd : Psd object
+        p0 : float
             power spectral density in m^2 at `f0` Hz
         beta
             power spectra slope in loglog scale
@@ -844,16 +916,164 @@ class Psd:
         N = min(shape[-2:])
         freq = _get_freqs(N, resolution, positive=True, shift=True)
         freq0 = cls._get_freq0(freq, freq0)
-        freq0_idx = np.argmin(np.abs(freq - freq0))
 
-        # logk = np.log10(freq)
-        # Make `beta` into an array of Polynomials
-        beta = _standardize_beta(beta, 1)
+        # Make `beta` into a Polynomial
+        beta = _standardize_beta(beta, 1)[0]
 
-        # logp = beta(logk)
-        b_coeffs = np.array([b.coef for b in beta])
-        logp = polyval(np.log10(freq), b_coeffs.T)
+        psd1d = cls._eval_freq(freq, beta)
+        psd1d *= p0 / cls._eval_freq(freq0, beta)
 
-        psd1d = 10**logp
-        psd1d *= p0 / psd1d[freq0_idx]
-        return cls(p0, beta, freq, psd1d, shape=shape, freq0=freq0)
+        beta_hat = cls.fit_psd1d(freq, psd1d, freq0=freq0, deg=beta.degree())
+        return Psd(
+            beta=beta_hat,
+            resolution=resolution,
+            shape=shape,
+            freq0=freq0,
+        )
+
+
+class PsdStack:
+    psd_list: List[Psd]
+
+    @classmethod
+    def _get_psd_stack(
+        cls,
+        stack,
+        resolution=60.0,
+        freq0=None,
+        deg=3,
+        crop=True,
+        N=None,
+    ):
+        """Find the PSD estimates for a stack of images
+        Passed onto get_psd
+
+        Parameters
+        ----------
+        stack : 3D ndarray
+            displacement in meters (num_images, rows, cols)
+        resolution : float
+            spatial resolution of input data in meters
+        freq0 : float
+            reference spatial frequency in cycle / m.
+        deg : int
+            degree of Polynomial to fit to PSD. default = 3, cubic
+        crop : bool
+            crop the data into a square image with fewest non-zero pixels
+            (Default value = True)
+        N : int
+            size to crop square (defaults to size of smaller side)
+        resolution : float
+            (Default value = 60.0)
+        freq0 : float
+            (Default value = 1e-4)
+
+        Returns
+        -------
+        Psd object with iterables for p0, beta, and psd1d
+        """
+        psd_list = []
+        skip_progress_bar = len(stack) < 5
+        for image in tqdm(stack, disable=skip_progress_bar):
+            psd_list.append(
+                Psd.from_image(
+                    image,
+                    resolution=resolution,
+                    freq0=freq0,
+                    deg=deg,
+                    crop=crop,
+                    N=N,
+                )
+            )
+        return cls(psd_list)
+
+    def simulate(self, **kwargs) -> np.ndarray:
+        """Simulate the stack of images from the PSD
+
+        Returns
+        -------
+        ndarray
+            simulated stack of images
+        """
+        return simulate(
+            shape=self.shape,
+            beta=self.beta,
+            resolution=self.resolution,
+            p0=self.p0,
+            freq0=self.freq0,
+            **kwargs,
+        )
+
+    def __init__(self, psd_list):
+        # check that all Psd objects have same shape
+        if not all([psd.shape == psd_list[0].shape for psd in psd_list]):
+            raise ValueError("All Psd objects must have same shape")
+        # check that all Psd objects have same resolution
+        if not all([psd.resolution == psd_list[0].resolution for psd in psd_list]):
+            raise ValueError("All Psd objects must have same resolution")
+        # check that all Psd objects have same freq0
+        if not all([psd.freq0 == psd_list[0].freq0 for psd in psd_list]):
+            raise ValueError("All Psd objects must have same freq0")
+        self.psd_list = psd_list
+
+    def __str__(self):
+        return f"PsdStack with {len(self)} images"
+
+    def __repr__(self) -> str:
+        return (
+            f"PsdStack(psd_list=[{', '.join([repr(psd) for psd in self.psd_list])}]])"
+        )
+
+    def __rich_repr__(self):
+        yield "psd_list", self.psd_list
+
+    def __eq__(self, o: object) -> bool:
+        if not isinstance(o, PsdStack):
+            return False
+        return all([psd1 == psd2 for psd1, psd2 in zip(self.psd_list, o.psd_list)])
+
+    @property
+    def p0(self):
+        return np.array([psd.p0 for psd in self.psd_list])
+
+    @property
+    def beta(self):
+        return np.array([psd.beta for psd in self.psd_list])
+
+    @property
+    def psd1d(self):
+        return np.array([psd.psd1d for psd in self.psd_list])
+
+    @property
+    def freq(self):
+        return self.psd_list[0].freq
+
+    @property
+    def freq0(self):
+        return self.psd_list[0].freq0
+
+    @property
+    def resolution(self):
+        return self.psd_list[0].resolution
+
+    @property
+    def shape(self):
+        return (len(self.psd_list),) + self.psd_list[0].shape
+
+    def __getitem__(self, idx):
+        return self.psd_list[idx]
+
+    def __len__(self):
+        return len(self.psd_list)
+
+    def __add__(self, other):
+        if not isinstance(other, PsdStack):
+            raise TypeError("Both objects must be `PsdStack` instances")
+        return PsdStack(self.psd_list + other.psd_list)
+
+    def asdict(self):
+        return dict(psd_list=[psd.asdict() for psd in self.psd_list])
+
+    @classmethod
+    def fromdict(cls, d):
+        return cls([Psd.fromdict(psd) for psd in d["psd_list"]])
