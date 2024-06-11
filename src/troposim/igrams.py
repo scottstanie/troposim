@@ -27,7 +27,6 @@ class IgramMaker:
     # num_bad_days = 5
     # bad_day_mult = 8
     ref: Tuple[int] = (5, 5)
-    distribution: str = "normal"
 
     def make_sar_dates(self):
         """ """
@@ -49,25 +48,32 @@ class IgramMaker:
         p0_rv=None,
         seed=None,
     ):
-        """
+        """Create the 3D stack of synthetic SAR phase data.
 
         Parameters
         ----------
-        beta :
-             (Default value = None)
-        beta_arr :
-             (Default value = None)
-        beta_savename :
-             (Default value = None)
-        p0_params :
-             (Default value = None)
-        p0_arr :
-             (Default value = None)
-        p0_rv :
-             (Default value = None)
-        seed :
-             (Default value = None)
+        beta : float
+            The beta parameter for the power law PSD. Defaults to 8/3.
+        beta_arr : np.ndarray
+            Array of beta values to randomly sample from.
+        beta_savename : str
+            Filename to load beta polynomial from.
+        p0_params : dict
+            Parameters passed to a random variable generator of `p0_rv`.
+        p0_arr : np.ndarray
+            Array of p0 values to randomly sample from.
+        p0_rv : str or scipy.stats.rv_continuous
+            Name of a random variable generator from scipy.stats or a frozen
+            random variable generator.
+        seed : int
+            Seed for the random number generator.
 
+        Returns
+        -------
+        sar_stack : np.ndarray (3D)
+            The 3D stack of SAR phase data.
+        sar_date_list : list
+            List of SAR dates corresponding to the 3D stack.
         """
 
         from scipy import stats
@@ -120,7 +126,6 @@ class IgramMaker:
             p0=self.p0_arr,
             freq0=self.freq0,
             resolution=self.resolution,
-            distribution=self.distribution,
             seed=seed,
         )
         if self.to_cm:
@@ -174,29 +179,29 @@ class IgramMaker:
         sar_stack=None,
         **sar_stack_kwargs,
     ):
-        """
+        """Create the interferogram stack from the SAR stack.
 
         Parameters
         ----------
-        save_ext :
-             (Default value = None)
-        independent :
-             (Default value = True)
-        max_date :
-             (Default value = None)
-        max_date_idx :
-             (Default value = None)
-        max_temporal_baseline :
-             (Default value = 5000)
-        sar_stack :
-             (Default value = None)
-        **sar_stack_kwargs :
-
-
+        save_ext : str
+            Extension to save the igram stack to. Defaults to None.
+        independent : bool
+            Whether to select independent or redundant dates. Defaults to True.
+        max_date : str
+            The maximum date to use in the stack. Defaults to None.
+        max_date_idx : int
+            The maximum date index to use in the stack. Defaults to None.
+        max_temporal_baseline : int
+            The maximum temporal baseline (in days) to use in the stack. Defaults to 5000.
+        sar_stack : np.ndarray
+            The SAR stack to use. Defaults to None.
+        sar_stack_kwargs : dict
+            Keyword arguments to pass to `make_sar_stack` if `sar_stack` is None.
+        
         Returns
         -------
-        ndarray
-            3D stack of interferograms
+        igram_stack : np.ndarray (3D)
+            The interferogram stack.
         """
         if sar_stack is None:
             if self.sar_stack is None:
@@ -219,6 +224,7 @@ class IgramMaker:
 
         igram_stack = []  # list of arrays
         temporal_baselines = []
+        selected_dates = []
         for early_date, late_date in igram_date_list:
             if (late_date - early_date).days > max_temporal_baseline:
                 continue
@@ -227,6 +233,7 @@ class IgramMaker:
             late_idx = self.sar_date_list.index(late_date)
             early, late = self.sar_stack[early_idx], self.sar_stack[late_idx]
 
+            selected_dates.append((early_date, late_date))
             # igram = np.abs(late) - np.abs(early) . # Why abs val??
             igram = late - early
             igram_stack.append(igram)
@@ -241,16 +248,20 @@ class IgramMaker:
                 # igram_fname_list.append(fname)
 
         igram_stack = np.array(igram_stack)
-        self.igram_date_list = igram_date_list
+        self.igram_date_list = selected_dates
         self.temporal_baselines = np.array(temporal_baselines)
         return igram_stack
-
+    
     def subtract_reference(self, igram_stack, ref=None):
         """Subtract a reference from the interferogram stack"""
         if ref is None:
             ref = self.ref
         # Add nones to keep 3D
-        ref_points = igram_stack[:, ref[0], ref[1]][:, None, None]
+        ref_points = igram_stack[:, ref[0], ref[1]]
+        if ref_points.ndim == 1:
+            ref_points = ref_points[:, None, None]
+        else:
+            ref_points = ref_points.mean(axis=(1, 2), keepdims=True)
         return igram_stack - ref_points
 
     def _make_time_evolution(self, rates, smooth):
