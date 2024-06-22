@@ -1,17 +1,18 @@
 """Module for simple synthetic deformations, not following any real physical model"""
+
 import numpy as np
 import scipy.ndimage as ndi
 
 
 def gaussian(
-    shape,
-    sigma,
-    row=None,
-    col=None,
-    normalize=False,
-    amp=None,
-    noise_sigma=0.0,
-):
+    shape: tuple[int, int],
+    sigma: float,
+    row: int | None = None,
+    col: int | None = None,
+    normalize: bool = False,
+    amp: float | None = None,
+    noise_sigma: float = 0.0,
+) -> np.ndarray:
     """Create a gaussian bowl of given shape and width
 
     Parameters
@@ -37,7 +38,7 @@ def gaussian(
     ndarray
     """
     d = delta(shape, row, col)
-    out = ndi.gaussian_filter(d, sigma, mode="constant") * sigma ** 2
+    out = ndi.gaussian_filter(d, sigma, mode="constant") * sigma**2
     normed = _normalize_gaussian(out, normalize=normalize, amp=amp)
     if noise_sigma > 0:
         normed += noise_sigma * np.random.standard_normal(shape)
@@ -50,15 +51,17 @@ def delta(shape, row=None, col=None):
     Parameters
     ----------
     shape : tuple[int]
-       size of image to maek 
-    row :
-        (Default value = None)
-    col :
-        (Default value = None)
+       size of image to make
+    row : int, optional
+        center row of spike, defaults to center of image
+    col : int, optional
+        center column of spike, defaults to center of image
 
     Returns
     -------
     ndarray
+        An image with a spike of value 1 at the specified center
+
     """
     delta = np.zeros(shape)
     rows, cols = shape
@@ -92,7 +95,7 @@ def _normalize_gaussian(out, normalize=False, amp=None):
 
 def _calc_ab(sigma, ecc):
     """Calculate semi-major/semi-minor axis length from `sigma` and `ecc`entricity"""
-    a = np.sqrt(sigma ** 2 / (1 - ecc))
+    a = np.sqrt(sigma**2 / (1 - ecc))
     b = a * (1 - ecc)
     return a, b
 
@@ -109,46 +112,50 @@ def _xy_grid(shape, xmin=None, xmax=None, ymin=None, ymax=None):
 
 
 def gaussian_ellipse(
-    shape,
-    a=None,
-    b=None,
-    sigma=None,
-    ecc=None,
-    row=None,
-    col=None,
-    theta=0,
-    normalize=False,
-    amp=None,
-    noise_sigma=0,
-):
-    """Make an ellipse using multivariate gaussian
+    shape: tuple[int, int],
+    a: float | None = None,
+    b: float | None = None,
+    sigma: float | None = None,
+    ecc: float | None = None,
+    row: int | None = None,
+    col: int | None = None,
+    theta: float = 0,
+    normalize: bool = False,
+    amp: float | None = None,
+    noise_sigma: float = 0,
+) -> np.ndarray:
+    """Make an ellipse using multivariate gaussian.
 
     Parameters
     ----------
-    shape : tuple[int
+    shape : tuple[int, int]
         size of grid
-    a :
-        semi major axis length (Default value = None)
-    b :
-        semi minor axis length (Default value = None)
-    sigma :
-        std dev of gaussian, if it were circular (Default value = None)
-    ecc :
+    a : float | None
+        semi major axis length
+    b : float | None
+        semi minor axis length
+    sigma : float | None
+        std dev of gaussian, if it were circular
+    ecc : float | None
         from 0 to 1, alternative to (a, b) specification is (sigma, ecc)
-        ecc = 1 - (b/a), and area = pi*sigma**2 = pi*a*b (Default value = None)
-    row :
-        row of center (Default value = None)
-    col :
-        col of center (Default value = None)
-    theta :
-        degrees of rotation (CCW) (Default value = 0)
+        ecc = 1 - (b/a), and area = pi*sigma**2 = pi*a*b
+    row : int | None
+        row of center
+    col : int | None
+        col of center
+    theta : float
+        degrees of rotation (CCW)
     normalize : bool
-        if true, set max value to 1 (Default value = False)
-    amp : float
-        value of peak of gaussian (Default value = None)
+        if true, set max value to 1
+    amp : float | None
+        value of peak of gaussian
     noise_sigma : float
-        optional, adds gaussian noise to blob (Default value = 0)
-    
+        optional, adds gaussian noise to blob
+
+    Returns
+    -------
+    np.ndarray
+        2D array containing the gaussian ellipse
     """
     from scipy.stats import multivariate_normal
 
@@ -163,7 +170,7 @@ def gaussian_ellipse(
 
     R = _rotation_matrix(theta)
     # To rotate, we do R @ P @ R.T to rotate eigenvalues of P = S L S^-1
-    cov = np.dot(R, np.array([[b ** 2, 0], [0, a ** 2]]))
+    cov = np.dot(R, np.array([[b**2, 0], [0, a**2]]))
     cov = np.dot(cov, R.T)
     var = multivariate_normal(mean=[col, row], cov=cov)
 
@@ -177,7 +184,7 @@ def gaussian_ellipse(
 
 
 def valley(shape, rotate=0):
-    """Make a valley in image center (curvature only in 1 direction) """
+    """Make a valley in image center (curvature only in 1 direction)"""
     from skimage import transform
 
     rows, cols = shape
@@ -190,7 +197,7 @@ def valley(shape, rotate=0):
 def bowl(shape):
     """Simple quadratic bowl"""
     xx, yy = _xy_grid(shape)
-    z = xx ** 2 + yy ** 2
+    z = xx**2 + yy**2
     return z / np.max(z)
 
 
@@ -199,7 +206,7 @@ def quadratic(shape, coeffs):
     nrows, ncols = shape
     row_block, col_block = np.mgrid[0:nrows, 0:ncols]
     yy, xx = row_block.flatten(), col_block.flatten()
-    idx_matrix = np.c_[np.ones(xx.shape), xx, yy, xx * yy, xx ** 2, yy ** 2]
+    idx_matrix = np.c_[np.ones(xx.shape), xx, yy, xx * yy, xx**2, yy**2]
     return np.dot(idx_matrix, coeffs).reshape(shape)
 
 
@@ -220,7 +227,7 @@ def stack(N=501, max_amp=3, plot=False, cmap="jet"):
     Returns
     -------
 
-    
+
     """
     shape = (N, N)
     b1 = gaussian(shape, 60, N // 3, 2 * N // 3)
