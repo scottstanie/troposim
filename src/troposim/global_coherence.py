@@ -66,6 +66,7 @@ def get_rasters(
     variable: Variable | str,
     season: Season | str,
     shape: tuple[int, int] | None = None,
+    upsample_factors: tuple[int, int] | None = None,
     convert_data: bool = True,
     interp_method: str = "linear",
     outfile: PathOrStr | None = None,
@@ -88,6 +89,8 @@ def get_rasters(
     shape : tuple[int, int] | None, optional
         The desired output shape of the raster. If provided, the raster will be
         interpolated to this shape.
+    upsample_factors : tuple[int, int] | None, optional
+        Alternative to `shape`: The upsampling factors for the x and y axes.
     convert_data : bool, optional
         If True, the data will be converted to the appropriate units.
         AMP rasters will be converted to power
@@ -128,7 +131,12 @@ def get_rasters(
         profile.update(dtype="float32")
     else:
         data = X[0]
-    if shape is not None:
+    if shape is not None or upsample_factors is not None:
+        if shape is None:
+            shape = (
+                int(profile["height"] * upsample_factors[0]),
+                int(profile["width"] * upsample_factors[1]),
+            )
         # interpolate to be the same shape
         data = _interpolate_data(data, shape, method=interp_method)
         profile.update(height=shape[0], width=shape[1])
@@ -213,10 +221,6 @@ def fit_model(
     """Fit the model to the data."""
     from scipy.optimize import curve_fit
 
-    # Initial guess for parameters
-    # model = model_2param if num_params == 2 else model_3param
-    # p0 = [0.5, 1.0]  # Initial guess for [rho_inf, tau]
-    # popt, pcov = curve_fit(model, T, gamma, p0=p0)
     if num_params == 2:
         p0 = [0.5, 12.0]  # Initial guess for [rho_inf, tau]
         model = model_2param
@@ -250,3 +254,30 @@ def fit_model(
         ax.legend()
 
     return popt, pcov
+
+
+def fit_yearly(bounds: Bbox, seasonal_ptp_cutoff: float = 0.5):
+    rhos = [
+        get_rasters(bounds, season=season, variable="rho", outfile=f"rho_{season}.tif")
+        for season in ["fall", "winter", "spring", "summer"]
+    ]
+    taus = [
+        get_rasters(bounds, season=season, variable="tau", outfile=f"tau_{season}.tif")
+        for season in ["fall", "winter", "spring", "summer"]
+    ]
+    # Pick out the array, not the profile
+    rho_stack = np.stack([r[0] for r in rhos])
+    tau_stack = np.stack([t[0] for t in taus])
+    rho_ptp = np.ptp(rho_stack, axis=0)
+    # For pixels where there's more than `seasonal_ptp_cutoff`, we'll model the decorrelation
+    # as seasonal instead of exponential decay
+    seasonal_pixels = rho_ptp > seasonal_ptp_cutoff
+    rho_min = rho_stack.min(axis=0)
+    A, B = rho_to_AB(rho_min)
+
+
+def rho_to_AB(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Convert rho to A and B parameters."""
+    A = 0.5 * (1 + np.sqrt(rho))
+    B = 0.5 * (1 - np.sqrt(rho))
+    return A, B

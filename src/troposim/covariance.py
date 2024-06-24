@@ -111,7 +111,7 @@ def simulate_coh_stack(
     gamma0: np.ndarray,
     gamma_inf: np.ndarray,
     Tau0: np.ndarray,
-    signal: np.ndarray,
+    signal: np.ndarray | None = None,
 ) -> np.ndarray:
     """Create a coherence matrix at each pixel.
 
@@ -143,8 +143,11 @@ def simulate_coh_stack(
     Tau0 = np.atleast_2d(Tau0)[:, :, None, None]
 
     gamma = (gamma0 - gamma_inf) * np.exp(time_diff / Tau0) + gamma_inf
-    phase_diff = signal[:, None] - signal[None, :]
-    C = gamma * np.exp(1j * phase_diff)
+    if signal is not None:
+        phase_diff = signal[:, None] - signal[None, :]
+        C = gamma * np.exp(1j * phase_diff)
+    else:
+        C = gamma * np.exp(1j * 0)
 
     rl, cl = np.tril_indices(num_time, k=-1)
 
