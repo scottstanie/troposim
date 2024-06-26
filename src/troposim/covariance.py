@@ -106,12 +106,21 @@ def simulate_coh(
     return C, truth
 
 
+from typing import NamedTuple
+
+
+class SeasonalCoeffs(NamedTuple):
+    A: np.ndarray
+    B: np.ndarray
+
+
 def simulate_coh_stack(
     time: np.ndarray,
     gamma0: np.ndarray,
     gamma_inf: np.ndarray,
     Tau0: np.ndarray,
     signal: np.ndarray | None = None,
+    seasonal_coeffs: SeasonalCoeffs | None = None,
 ) -> np.ndarray:
     """Create a coherence matrix at each pixel.
 
@@ -136,18 +145,30 @@ def simulate_coh_stack(
 
     """
     num_time = time.shape[0]
-    time_diff = time[:, None] - time[None, :]
-    time_diff = time_diff[None, None, :, :]
+    temp_baselines = time[None, :] - time[:, None]
+    temp_baselines = temp_baselines[None, None, :, :]
     gamma0 = np.atleast_2d(gamma0)[:, :, None, None]
     gamma_inf = np.atleast_2d(gamma_inf)[:, :, None, None]
     Tau0 = np.atleast_2d(Tau0)[:, :, None, None]
 
-    gamma = (gamma0 - gamma_inf) * np.exp(time_diff / Tau0) + gamma_inf
+    gamma = (gamma0 - gamma_inf) * np.exp(-temp_baselines / Tau0) + gamma_inf
     if signal is not None:
         phase_diff = signal[:, None] - signal[None, :]
-        C = gamma * np.exp(1j * phase_diff)
+        phase_term = np.exp(1j * phase_diff)
     else:
-        C = gamma * np.exp(1j * 0)
+        phase_term = np.exp(1j * 0)
+
+    if seasonal_coeffs is not None:
+        A = np.atleast_2d(seasonal_coeffs.A)[:, :, None, None]
+        B = np.atleast_2d(seasonal_coeffs.B)[:, :, None, None]
+        # A, B = seasonal_coeffs.A, seasonal_coeffs.B
+        # assert A.ndim == B.ndim == 4
+        seasonal_factor = (A + B * np.cos(2 * np.pi * temp_baselines / 365.25)) ** 2
+        # Ensure it is a valid coherence multiplier
+        seasonal_factor = np.clip(seasonal_factor, 0, 1)
+        gamma *= seasonal_factor
+
+    C = gamma * phase_term
 
     rl, cl = np.tril_indices(num_time, k=-1)
 

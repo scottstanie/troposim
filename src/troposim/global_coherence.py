@@ -131,7 +131,9 @@ def get_rasters(
         profile.update(dtype="float32")
     else:
         data = X[0]
-    if shape is not None or upsample_factors is not None:
+    if shape is not None or (
+        upsample_factors is not None and upsample_factors != (1, 1)
+    ):
         if shape is None:
             shape = (
                 int(profile["height"] * upsample_factors[0]),
@@ -256,7 +258,7 @@ def fit_model(
     return popt, pcov
 
 
-def fit_yearly(bounds: Bbox, seasonal_ptp_cutoff: float = 0.5):
+def get_yearly_coeffs(bounds: Bbox, seasonal_ptp_cutoff: float = 0.5):
     rhos = [
         get_rasters(bounds, season=season, variable="rho", outfile=f"rho_{season}.tif")
         for season in ["fall", "winter", "spring", "summer"]
@@ -268,12 +270,25 @@ def fit_yearly(bounds: Bbox, seasonal_ptp_cutoff: float = 0.5):
     # Pick out the array, not the profile
     rho_stack = np.stack([r[0] for r in rhos])
     tau_stack = np.stack([t[0] for t in taus])
+
+    return calculate_coeffs(rho_stack=rho_stack, tau_stack=tau_stack)
+
+
+def calculate_coeffs(rho_stack, tau_stack, seasonal_ptp_cutoff: float = 0.5):
     rho_ptp = np.ptp(rho_stack, axis=0)
     # For pixels where there's more than `seasonal_ptp_cutoff`, we'll model the decorrelation
     # as seasonal instead of exponential decay
     seasonal_pixels = rho_ptp > seasonal_ptp_cutoff
     rho_min = rho_stack.min(axis=0)
+    rho_max = rho_stack.max(axis=0)
+    tau_max = tau_stack.max(axis=0)
     A, B = rho_to_AB(rho_min)
+    # Two coefficients:
+    # 1. A, B: Where theres big variation, we use A, B for seasonal simulations
+    # 2. rho_inf, tau: Where it's similar, we just do an exponential decay
+    coeff1 = np.where(seasonal_pixels, A, rho_max)
+    coeff2 = np.where(seasonal_pixels, B, tau_max)
+    return coeff1, coeff2, seasonal_pixels
 
 
 def rho_to_AB(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
