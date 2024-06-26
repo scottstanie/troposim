@@ -124,7 +124,7 @@ def get_rasters(
         bounds,
         tile_shortname="s1_coherence_2020",
         season=season.value,
-        variable=variable.value,
+        s1_decay_model_param=variable.value,
     )
     if convert_data:
         data = convert_to_float(X[0], variable)
