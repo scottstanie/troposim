@@ -1,4 +1,5 @@
 import concurrent.futures
+import logging
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,12 +11,16 @@ import rasterio
 import rasterio as rio
 from pydantic import BaseModel, Field
 
+from ._blocks import iter_blocks
 from ._types import Bbox, PathOrStr
 
 SENTINEL_WAVELENGTH = 0.055465763  # meters
 METERS_TO_PHASE = 4 * 3.14159 / SENTINEL_WAVELENGTH
 SEASONS = []
 HDF5_KWARGS = {"chunks": True, "compression": "lzf"}
+BLOCK_SHAPE = (256, 256)
+
+logger = logging.getLogger(__name__)
 
 
 class SimulationInputs(BaseModel):
@@ -54,7 +59,7 @@ def create_simulation_data(inps: SimulationInputs):
     #     inps.bounding_box, outdir=outdir, upsample=(upsample_y, upsample_x)
     # )
     print("Getting Rhos, Tau rasters")
-    (rhos, taus, seasonal_A, seasonal_B, seasonal_mask, profile) = (
+    (amps, rhos, taus, seasonal_A, seasonal_B, seasonal_mask, profile) = (
         global_coherence.get_coherence_model_coeffs(
             bounds=inps.bounding_box,
             upsample=upsample,
@@ -79,7 +84,7 @@ def create_simulation_data(inps: SimulationInputs):
     shape2d = rhos.shape[0], rhos.shape[1]
     shape3d = (inps.num_dates, shape2d[0], shape2d[1])
     print(f"{shape3d = }")
-    propagation_phase = np.zeros(shape3d, dtype="float32")
+    # propagation_phase = np.zeros(shape3d, dtype="float32")
     files = {}
     # signal = np.zeros_like(shape2d, dtype="float32") # deformation only
     if inps.include_turbulence:
@@ -112,26 +117,102 @@ def create_simulation_data(inps: SimulationInputs):
         )
 
     print("Creating coherence matrices for each pixel")
-    C_arrays = covariance.simulate_coh_stack(
-        time=x_arr,
-        gamma_inf=rhos,
-        gamma0=np.ones_like(rhos),  # the global coherence raster model assumes gamma0=1
-        Tau0=taus,
-        seasonal_A=seasonal_A,
-        seasonal_B=seasonal_B,
-        seasonal_mask=seasonal_mask,
+    b_iter = list(
+        iter_blocks(
+            arr_shape=shape2d,
+            block_shape=BLOCK_SHAPE,
+        )
     )
-    print("Simulating correlated noise")
-    # cur_amplitudes = ... # Read Bbox from amps...
-    noisy_stack = covariance.make_noisy_samples(
-        C=C_arrays, defo_stack=propagation_phase, amplitudes=amplitudes
-    )
-    for date, layer in zip(time, noisy_stack):
-        filename = outdir / f"{date.strftime('%Y%m%d')}.slc.tif"
+    # with h5py.File("C_arrays.h5", "w") as hf_in, h5py.File("noisy_stack.h5", "w") as hf_out:
+    #     dset = hf_in.create_dataset(
+    #         "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
+    #     )
+    #     dset = hf_out.create_dataset(
+    #         "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
+    #     )
+    with h5py.File("noisy_stack.h5", "w") as hf_out:
+        dset_out = hf_out.create_dataset(
+            "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
+        )
+        for rows, cols in b_iter:
+            print(f"Simulating correlated noise for {rows}, {cols}")
+            C_arrays = covariance.simulate_coh_stack(
+                time=x_arr,
+                gamma_inf=rhos[rows, cols],
+                # the global coherence raster model assumes gamma0=1
+                gamma0=0.95 * np.ones_like(rhos[rows, cols]),
+                Tau0=taus[rows, cols],
+                seasonal_A=seasonal_A[rows, cols],
+                seasonal_B=seasonal_B[rows, cols],
+                seasonal_mask=seasonal_mask[rows, cols],
+            )
+            propagation_phase = load_current_phase(files, rows, cols)
+            # cur_amplitudes = ... # Read Bbox from amps...
+            print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
 
-        with rio.open(filename, "w", **profile) as dst:
-            dst.write(layer, 1)
+            noisy_stack = covariance.make_noisy_samples(
+                C=C_arrays, defo_stack=propagation_phase, amplitudes=amps[rows, cols]
+            )
+            # dset_out.write_direct(noisy_stack, dest_sel=np.s_[:, rows, cols])
+            dset_out[:, rows, cols] = noisy_stack
+
+            # for date, layer in zip(time, noisy_stack):
+            #     filename = outdir / f"{date.strftime('%Y%m%d')}.slc.tif"
+
+            #     with rio.open(filename, "w", **profile) as dst:
+            #         dst.write(layer, 1)
     return noisy_stack
+
+
+def load_current_phase(files: dict[str, Path], rows: slice, cols: slice) -> np.ndarray:
+    """Load and sum the phase data from multiple HDF5 files for a row/column block.
+
+    Parameters
+    ----------
+    files (Dict[str, Path])
+        Dictionary of file paths for different phase components.
+    rows (slice)
+        Row slice to extract.
+    cols (slice)
+        Column slice to extract.
+
+    Returns
+    -------
+    np.ndarray: 3D array representing the summed phase data for the specified block.
+
+    """
+    summed_phase = None
+
+    for component, file_path in files.items():
+        logger.debug(f"Loading {component}")
+        with h5py.File(file_path, "r") as f:
+            # Assume the main dataset is named 'data'. Adjust if necessary.
+            dset: h5py.Dataset = f["data"]
+
+            # Check if the dset is 3D
+            if dset.ndim == 3:
+                # For 3D datasets, load the full depth
+                data = dset[:, rows, cols]
+            elif dset.ndim == 2:
+                # For 2D datasets, add a depth dimension of 1
+                data = dset[rows, cols][np.newaxis, :, :]
+            else:
+                raise ValueError(f"Unexpected dset shape in {file_path}: {dset.shape}")
+
+            if summed_phase is None:
+                summed_phase = data
+            else:
+                # Ensure the shapes match before adding
+                if summed_phase.shape != data.shape:
+                    raise ValueError(
+                        f"Shape mismatch: {summed_phase.shape} vs {data.shape}"
+                    )
+                summed_phase += data
+
+    if summed_phase is None:
+        raise ValueError("No valid data found in the provided files.")
+
+    return summed_phase
 
 
 def create_ramps(

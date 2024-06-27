@@ -327,16 +327,24 @@ def fetch_rho_tau_amp(
     amp_stack = np.stack([t[0] for t in amps])
     # get one profile:
     profile = rhos[0][1]
-    return rho_stack, tau_stack, amp_stack, profile
+    return amp_stack, rho_stack, tau_stack, profile
 
 
 def get_coherence_model_coeffs(
     bounds: Bbox,
-    seasonal_ptp_cutoff: float = 0.5,
+    seasonal_ptp_cutoff: float = 1.5,
     upsample: tuple[int, int] = (1, 1),
     output_dir=Path("."),
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    rho_stack, tau_stack, _, profile = fetch_rho_tau_amp(
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    dict[str, Any],
+]:
+    rho_stack, tau_stack, amp_stack, profile = fetch_rho_tau_amp(
         bounds=bounds, upsample=upsample, output_dir=output_dir
     )
 
@@ -345,7 +353,8 @@ def get_coherence_model_coeffs(
     )
     rho_max = np.max(rho_stack, axis=0)
     tau_max = tau_stack.max(axis=0)
-    return rho_max, tau_max, A, B, seasonal_mask, profile
+    amp_mean = np.mean(amp_stack, axis=0)
+    return amp_mean, rho_max, tau_max, A, B, seasonal_mask, profile
 
 
 def calculate_seasonal_coeffs(
