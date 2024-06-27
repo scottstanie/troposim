@@ -1,13 +1,20 @@
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from enum import Enum
 from pathlib import Path
 from typing import Any
-import logging
-from enum import Enum
+
 import numpy as np
+import rasterio
+from affine import Affine
 from numpy.typing import ArrayLike
+from rasterio import windows
 
 from ._types import Bbox, PathOrStr
 
 logger = logging.getLogger(__name__)
+COHERENCE_GPKG_ZIP = Path(__file__).parent / "data/global_coherence_layers.gti.gpkg.zip"
+COHERENCE_GDAL_PATH = f"/vsizip/{COHERENCE_GPKG_ZIP}/global_coherence_layers.gti.gpkg"
 
 
 class Season(Enum):
@@ -115,33 +122,42 @@ def get_rasters(
     Kellndorfer, J., Cartus, O., Lavalle, M. et al. Global seasonal Sentinel-1
     interferometric coherence and backscatter data set. Sci Data 9, 73 (2022).
     https://doi.org/10.1038/s41597-022-01189-6
-    """
-    import rasterio
-    from tile_mate import get_raster_from_tiles
 
+    """
     if outfile and Path(outfile).exists():
         logger.info("Reading from %s", outfile)
         with rasterio.open(outfile) as src:
-            profile = src.profile
-            return src.read(1), profile
+            return src.read(1), src.profile
 
     variable = Variable(variable)
     season = Season(season)
 
-    param = variable.value
-    if variable == Variable.AMP:
-        param = param.upper()
-    X, profile = get_raster_from_tiles(
-        bounds,
-        tile_shortname="s1_coherence_2020",
-        season=season.value,
-        s1_decay_model_param=param,
-    )
+    # Construct the layer name
+    layer_name = f"coherence_{season.value.lower()}_{variable.value.lower()}"
+    # if variable == Variable.AMP:
+    #     layer_name = layer_name.replace("amp", "AMP")
+    with rasterio.open(COHERENCE_GDAL_PATH, layer=layer_name) as src:
+        # Get the window for the bounds
+        window = windows.from_bounds(*bounds, src.transform)
+
+        # Read the data
+        data = src.read(1, window=window)
+
+        # Get the profile for the windowed read
+        profile = src.profile.copy()
+        profile.update(
+            {
+                "height": window.height,
+                "width": window.width,
+                "transform": windows.transform(window, src.transform),
+                "driver": "GTiff",
+            }
+        )
+
     if convert_data:
-        data = convert_to_float(X[0], variable)
-        profile.update(dtype="float32")
-    else:
-        data = X[0]
+        data = convert_to_float(data, variable)
+        profile.update(dtype=data.dtype)
+
     if shape is not None or (
         upsample_factors is not None and upsample_factors != (1, 1)
     ):
@@ -150,13 +166,13 @@ def get_rasters(
                 int(profile["height"] * upsample_factors[0]),
                 int(profile["width"] * upsample_factors[1]),
             )
-        # interpolate to be the same shape
         data = _interpolate_data(data, shape, method=interp_method)
-        # Update the profile with the new shape if it was changed
+
+        # Update the profile with the new shape
         profile.update(height=shape[0], width=shape[1])
+        profile["transform"] *= Affine.scale(*upsample_factors[::-1])
 
     if outfile:
-        # Write the data to the output file
         with rasterio.open(outfile, "w", **profile) as dst:
             dst.write(data, 1)
         logger.info(f"Raster data saved to {outfile}")
@@ -268,60 +284,50 @@ def fit_model(
     return popt, pcov
 
 
-def fetch_rho_tau(
+def fetch_rho_tau_amp(
     bounds: Bbox,
     upsample: tuple[int, int] = (1, 1),
-    output_dir=Path("."),
+    output_dir=Path(),
 ):
-    rhos = [
-        get_rasters(
+    def fetch_single(variable, season):
+        return get_rasters(
             bounds,
             season=season,
-            variable="rho",
-            outfile=output_dir / f"rho_{season}.tif",
+            variable=variable,
+            outfile=output_dir / f"{variable}_{season}.tif",
             upsample_factors=upsample,
         )
-        for season in ["fall", "winter", "spring", "summer"]
-    ]
-    taus = [
-        get_rasters(
-            bounds,
-            season=season,
-            variable="tau",
-            outfile=output_dir / f"tau_{season}.tif",
-            upsample_factors=upsample,
-        )
-        for season in ["fall", "winter", "spring", "summer"]
-    ]
+
+    seasons = [s.value for s in Season]
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_params = {}
+        for variable in ["rho", "tau", "amp"]:
+            cur_futures = {
+                executor.submit(fetch_single, variable, season): (variable, season)
+                for season in seasons
+            }
+            future_to_params.update(cur_futures)
+
+        for future in as_completed(future_to_params):
+            variable, season = future_to_params[future]
+            try:
+                results[(variable, season)] = future.result()
+            except Exception as exc:
+                print(f"{variable}_{season} generated an exception: {exc}")
+
+    rhos = [results[("rho", season)] for season in seasons]
+    taus = [results[("tau", season)] for season in seasons]
+    amps = [results[("amp", season)] for season in seasons]
+
     # Pick out the array, not the profile
     rho_stack = np.stack([r[0] for r in rhos])
     tau_stack = np.stack([t[0] for t in taus])
+    amp_stack = np.stack([t[0] for t in amps])
     # get one profile:
     profile = rhos[0][1]
-    return rho_stack, tau_stack, profile
-
-
-def fetch_amplitudes(
-    bounds: Bbox,
-    upsample: tuple[int, int] = (1, 1),
-    output_dir=Path("."),
-) -> tuple[np.ndarray, dict[str, Any]]:
-    amps = [
-        get_rasters(
-            bounds,
-            season=season,
-            variable="amp",
-            outfile=output_dir / f"amp_{season}.tif",
-            upsample_factors=upsample,
-        )
-        for season in ["fall", "winter", "spring", "summer"]
-    ]
-
-    # Pick out the array, not the profile
-    amp_stack = np.stack([r[0] for r in amps])
-    # get one profile:
-    profile = amps[0][1]
-    return amp_stack, profile
+    return rho_stack, tau_stack, amp_stack, profile
 
 
 def get_coherence_model_coeffs(
@@ -330,7 +336,7 @@ def get_coherence_model_coeffs(
     upsample: tuple[int, int] = (1, 1),
     output_dir=Path("."),
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    rho_stack, tau_stack, profile = fetch_rho_tau(
+    rho_stack, tau_stack, _, profile = fetch_rho_tau_amp(
         bounds=bounds, upsample=upsample, output_dir=output_dir
     )
 

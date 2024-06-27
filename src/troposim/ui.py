@@ -62,12 +62,12 @@ def create_simulation_data(inps: SimulationInputs):
         )
     )
 
-    print("Getting amplitudes")
-    amplitudes, amp_prof = global_coherence.fetch_amplitudes(
-        bounds=inps.bounding_box,
-        output_dir=outdir,
-        upsample=upsample,
-    )
+    # print("Getting amplitudes")
+    # amplitudes, amp_prof = global_coherence.fetch_amplitudes(
+    #     bounds=inps.bounding_box,
+    #     output_dir=outdir,
+    #     upsample=upsample,
+    # )
     assert rhos.ndim == 2
     assert (
         rhos.shape
@@ -85,10 +85,10 @@ def create_simulation_data(inps: SimulationInputs):
     if inps.include_turbulence:
         print("Generating turbulence")
         files["turbulence"] = outdir / "turbulence.h5"
-        turb_stack = create_turbulence(
+        create_turbulence(
             shape2d=shape2d, num_days=inps.num_dates, out_hdf5=files["turbulence"]
         )
-        propagation_phase += turb_stack
+        # propagation_phase += turb_stack
         # signal += turb_stack
         # Save:
         # prof = profile.copy()
@@ -102,7 +102,7 @@ def create_simulation_data(inps: SimulationInputs):
             out_hdf5=files["deformation"],
         )
         # propagation_phase += defo_stack
-    if inps.include_ramp:
+    if inps.include_ramps:
         print("Generating ramps")
         files["phase_ramps"] = outdir / "phase_ramps.h5"
         create_ramps(
@@ -122,6 +122,7 @@ def create_simulation_data(inps: SimulationInputs):
         seasonal_mask=seasonal_mask,
     )
     print("Simulating correlated noise")
+    # cur_amplitudes = ... # Read Bbox from amps...
     noisy_stack = covariance.make_noisy_samples(
         C=C_arrays, defo_stack=propagation_phase, amplitudes=amplitudes
     )
@@ -138,8 +139,15 @@ def create_ramps(
 ):
     from .deformation import synthetic
 
-    rotations = [np.random.randint(0, 360, size=(num_days,))]
-    synthetic.ramp(shape=shape2d, amplitude=amplitude, rotate_degrees=r)
+    shape3d = (num_days, *shape2d)
+    rotations = np.random.randint(0, 360, size=(num_days,))
+    with h5py.File(out_hdf5, "w") as hf:
+        dset = hf.create_dataset("data", shape=shape3d, dtype="float32", **HDF5_KWARGS)
+        for idx, r in enumerate(rotations):
+            ramp_phase = synthetic.ramp(
+                shape=shape2d, amplitude=amplitude, rotate_degrees=r
+            )
+            dset.write_direct(ramp_phase, dest_sel=idx)
 
 
 def create_stratified(dem, num_days, out_hdf5: PathOrStr):
@@ -200,7 +208,7 @@ def create_defo_stack(
     # Broadcast this shape with linear evolution
     time_evolution = np.linspace(0, 1, num=num_time_steps)
 
-    with h5py.File(out_hdf5) as hf:
+    with h5py.File(out_hdf5, "w") as hf:
         dset = hf.create_dataset("data", shape=shape, dtype="float32", **HDF5_KWARGS)
         for idx, t in enumerate(time_evolution):
             dset.write_direct(final_defo * t, dest_sel=idx)
