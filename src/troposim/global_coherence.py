@@ -302,13 +302,11 @@ def fetch_rho_tau_amp(
 
     results = {}
     with ThreadPoolExecutor(max_workers=4) as executor:
-        future_to_params = {}
-        for variable in ["rho", "tau", "amp"]:
-            cur_futures = {
-                executor.submit(fetch_single, variable, season): (variable, season)
-                for season in seasons
-            }
-            future_to_params.update(cur_futures)
+        future_to_params = {
+            executor.submit(fetch_single, variable, season): (variable, season)
+            for season in seasons
+            for variable in ["rho", "tau", "amp"]
+        }
 
         for future in as_completed(future_to_params):
             variable, season = future_to_params[future]
@@ -332,7 +330,7 @@ def fetch_rho_tau_amp(
 
 def get_coherence_model_coeffs(
     bounds: Bbox,
-    seasonal_ptp_cutoff: float = 1.5,
+    seasonal_ptp_cutoff: float = 0.5,
     upsample: tuple[int, int] = (1, 1),
     output_dir=Path("."),
 ) -> tuple[

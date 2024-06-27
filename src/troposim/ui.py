@@ -46,7 +46,9 @@ def create_simulation_data(inps: SimulationInputs):
 
     # from .deformation import synthetic
     # Create the times vector
-    time = [inps.start_date + timedelta(days=inps.dt) for i in range(inps.num_dates)]
+    time = [
+        inps.start_date + idx * timedelta(days=inps.dt) for idx in range(inps.num_dates)
+    ]
     x_arr = np.array([(t - time[0]).days for t in time])
 
     outdir = inps.output_dir
@@ -147,9 +149,8 @@ def create_simulation_data(inps: SimulationInputs):
                 seasonal_mask=seasonal_mask[rows, cols],
             )
             propagation_phase = load_current_phase(files, rows, cols)
-            # cur_amplitudes = ... # Read Bbox from amps...
-            print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
 
+            print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
             noisy_stack = covariance.make_noisy_samples(
                 C=C_arrays, defo_stack=propagation_phase, amplitudes=amps[rows, cols]
             )
