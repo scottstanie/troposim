@@ -1,6 +1,7 @@
 
 # igram files
 notebooks/data/
+.ipynb_checkpoints
 *.unw*
 *.cor*
 *.int*
