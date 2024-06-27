@@ -1,3 +1,5 @@
+from pathlib import Path
+from typing import Any
 import logging
 from enum import Enum
 import numpy as np
@@ -20,7 +22,7 @@ class Season(Enum):
 class Variable(Enum):
     """Variables for the global coherence raster."""
 
-    AMP = "AMP"  # capitalized in the dataset
+    AMP = "amp"  # note: capitalized in the dataset
     TAU = "tau"
     RHO = "rho"
     RMSE = "rmse"
@@ -117,14 +119,23 @@ def get_rasters(
     import rasterio
     from tile_mate import get_raster_from_tiles
 
+    if outfile and Path(outfile).exists():
+        logger.info("Reading from %s", outfile)
+        with rasterio.open(outfile) as src:
+            profile = src.profile
+            return src.read(1), profile
+
     variable = Variable(variable)
     season = Season(season)
 
+    param = variable.value
+    if variable == Variable.AMP:
+        param = param.upper()
     X, profile = get_raster_from_tiles(
         bounds,
         tile_shortname="s1_coherence_2020",
         season=season.value,
-        s1_decay_model_param=variable.value,
+        s1_decay_model_param=param,
     )
     if convert_data:
         data = convert_to_float(X[0], variable)
@@ -141,11 +152,10 @@ def get_rasters(
             )
         # interpolate to be the same shape
         data = _interpolate_data(data, shape, method=interp_method)
+        # Update the profile with the new shape if it was changed
         profile.update(height=shape[0], width=shape[1])
 
     if outfile:
-        # Update the profile with the new shape if it was changed
-
         # Write the data to the output file
         with rasterio.open(outfile, "w", **profile) as dst:
             dst.write(data, 1)
@@ -258,37 +268,92 @@ def fit_model(
     return popt, pcov
 
 
-def get_yearly_coeffs(bounds: Bbox, seasonal_ptp_cutoff: float = 0.5):
+def fetch_rho_tau(
+    bounds: Bbox,
+    upsample: tuple[int, int] = (1, 1),
+    output_dir=Path("."),
+):
     rhos = [
-        get_rasters(bounds, season=season, variable="rho", outfile=f"rho_{season}.tif")
+        get_rasters(
+            bounds,
+            season=season,
+            variable="rho",
+            outfile=output_dir / f"rho_{season}.tif",
+            upsample_factors=upsample,
+        )
         for season in ["fall", "winter", "spring", "summer"]
     ]
     taus = [
-        get_rasters(bounds, season=season, variable="tau", outfile=f"tau_{season}.tif")
+        get_rasters(
+            bounds,
+            season=season,
+            variable="tau",
+            outfile=output_dir / f"tau_{season}.tif",
+            upsample_factors=upsample,
+        )
         for season in ["fall", "winter", "spring", "summer"]
     ]
     # Pick out the array, not the profile
     rho_stack = np.stack([r[0] for r in rhos])
     tau_stack = np.stack([t[0] for t in taus])
+    # get one profile:
+    profile = rhos[0][1]
+    return rho_stack, tau_stack, profile
 
-    return calculate_coeffs(rho_stack=rho_stack, tau_stack=tau_stack)
+
+def fetch_amplitudes(
+    bounds: Bbox,
+    upsample: tuple[int, int] = (1, 1),
+    output_dir=Path("."),
+) -> tuple[np.ndarray, dict[str, Any]]:
+    amps = [
+        get_rasters(
+            bounds,
+            season=season,
+            variable="amp",
+            outfile=output_dir / f"amp_{season}.tif",
+            upsample_factors=upsample,
+        )
+        for season in ["fall", "winter", "spring", "summer"]
+    ]
+
+    # Pick out the array, not the profile
+    amp_stack = np.stack([r[0] for r in amps])
+    # get one profile:
+    profile = amps[0][1]
+    return amp_stack, profile
 
 
-def calculate_coeffs(rho_stack, tau_stack, seasonal_ptp_cutoff: float = 0.5):
+def get_coherence_model_coeffs(
+    bounds: Bbox,
+    seasonal_ptp_cutoff: float = 0.5,
+    upsample: tuple[int, int] = (1, 1),
+    output_dir=Path("."),
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+    rho_stack, tau_stack, profile = fetch_rho_tau(
+        bounds=bounds, upsample=upsample, output_dir=output_dir
+    )
+
+    A, B, seasonal_mask = calculate_seasonal_coeffs(
+        rho_stack=rho_stack, seasonal_ptp_cutoff=seasonal_ptp_cutoff
+    )
+    rho_max = np.max(rho_stack, axis=0)
+    tau_max = tau_stack.max(axis=0)
+    return rho_max, tau_max, A, B, seasonal_mask, profile
+
+
+def calculate_seasonal_coeffs(
+    rho_stack: np.ndarray, seasonal_ptp_cutoff: float = 0.5
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     rho_ptp = np.ptp(rho_stack, axis=0)
     # For pixels where there's more than `seasonal_ptp_cutoff`, we'll model the decorrelation
     # as seasonal instead of exponential decay
     seasonal_pixels = rho_ptp > seasonal_ptp_cutoff
     rho_min = rho_stack.min(axis=0)
-    rho_max = rho_stack.max(axis=0)
-    tau_max = tau_stack.max(axis=0)
+    # A, B: Where theres big variation, we use A, B for seasonal simulations
     A, B = rho_to_AB(rho_min)
-    # Two coefficients:
-    # 1. A, B: Where theres big variation, we use A, B for seasonal simulations
-    # 2. rho_inf, tau: Where it's similar, we just do an exponential decay
-    coeff1 = np.where(seasonal_pixels, A, rho_max)
-    coeff2 = np.where(seasonal_pixels, B, tau_max)
-    return coeff1, coeff2, seasonal_pixels
+    # otherwise,  we just do an exponential decay
+    return A, B, seasonal_pixels
 
 
 def rho_to_AB(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

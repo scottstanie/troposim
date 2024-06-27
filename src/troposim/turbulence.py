@@ -9,6 +9,7 @@ which was a Python translation in MintPy of the matlab scripts written by
 Ramon Hanssen, May 2000, available in the following website:
     http://doris.tudelft.nl/software/insarfractal.tar.gz
 """
+
 import copy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -18,7 +19,7 @@ from numpy.random import SeedSequence, default_rng
 from numpy.polynomial.polynomial import Polynomial, polyval
 from scipy import ndimage
 from scipy.fft import fft2, fftfreq, fftshift, ifft2
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from . import utils
 
@@ -227,7 +228,9 @@ def _standardize_beta(beta, num_images, verbose=False):
     if len(beta) == 1:
         beta = np.repeat(beta, num_images)
     if len(beta) != num_images:
-        raise ValueError(f"len(beta)={len(beta)} does not match num_images={num_images}")
+        raise ValueError(
+            f"len(beta)={len(beta)} does not match num_images={num_images}"
+        )
 
     if verbose:
         print(f"Simulation PSD beta: {beta}")

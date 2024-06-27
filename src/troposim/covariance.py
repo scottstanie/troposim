@@ -5,16 +5,29 @@ full CPU/GPU stack implementations.
 """
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 
+from ._types import PathOrStr
 
 rng = np.random.default_rng()
 
 
+def ccg_noise(N: int) -> NDArray[np.complex64]:
+    """Create N samples of standard complex circular Gaussian noise."""
+    return (
+        rng.normal(scale=1 / np.sqrt(2), size=2 * N)
+        .astype(np.float32)
+        .view(np.complex64)
+    )
+
+
 # TODO: move this into the `deformation` subpackage... or the simulated stack?
 def make_defo_stack(
-    shape: tuple[int, int, int], sigma: float, max_amplitude: float = 1
-) -> np.ndarray:
+    shape: tuple[int, int, int],
+    sigma: float,
+    max_amplitude: float = 1,
+    out_hdf5: PathOrStr | None = None,
+) -> np.ndarray | None:
     """Create the time series of deformation to add to each SAR date.
 
     Parameters
@@ -28,8 +41,9 @@ def make_defo_stack(
 
     Returns
     -------
-    np.ndarray
+    np.ndarray | None
         Deformation stack with time series, shape (num_time_steps, rows, cols).
+        If `out_hdf5` is passed, None is returned, as the file has been saved to disk.
 
     """
     from .deformation.synthetic import gaussian
@@ -40,17 +54,20 @@ def make_defo_stack(
     final_defo = gaussian(shape=shape2d, sigma=sigma).reshape((1, *shape2d))
     final_defo *= max_amplitude / np.max(final_defo)
     # Broadcast this shape with linear evolution
-    time_evolution = np.linspace(0, 1, num=num_time_steps)[:, None, None]
-    return (final_defo * time_evolution).astype(np.float32)
+    time_evolution = np.linspace(0, 1, num=num_time_steps)
+    if out_hdf5:
+        import h5py
 
+        with h5py.File(out_hdf5) as hf:
+            dset = hf.create_dataset(
+                "data", shape=shape, dtype="float32", compression="lzf"
+            )
+            for idx, t in enumerate(time_evolution):
+                dset[idx] = final_defo * t
 
-def ccg_noise(N: int) -> np.array:
-    """Create N samples of standard complex circular Gaussian noise."""
-    return (
-        rng.normal(scale=1 / np.sqrt(2), size=2 * N)
-        .astype(np.float32)
-        .view(np.complex64)
-    )
+        return
+
+    return (final_defo * time_evolution[:, None, None]).astype(np.float32)
 
 
 def simulate_coh(
@@ -61,7 +78,7 @@ def simulate_coh(
     acq_interval: int = 12,
     add_signal: bool = False,
     signal_std: float = 0.1,
-) -> np.array:
+) -> np.ndarray:
     """Simulate a correlation matrix for a pixel.
 
     Parameters
@@ -83,9 +100,9 @@ def simulate_coh(
 
     Returns
     -------
-    np.array
+    np.ndarray
         The simulated correlation matrix.
-    np.array
+    np.ndarray
         The simulated truth signal.
 
     """
@@ -106,21 +123,15 @@ def simulate_coh(
     return C, truth
 
 
-from typing import NamedTuple
-
-
-class SeasonalCoeffs(NamedTuple):
-    A: np.ndarray
-    B: np.ndarray
-
-
 def simulate_coh_stack(
     time: np.ndarray,
     gamma0: np.ndarray,
     gamma_inf: np.ndarray,
     Tau0: np.ndarray,
     signal: np.ndarray | None = None,
-    seasonal_coeffs: SeasonalCoeffs | None = None,
+    seasonal_mask: np.ndarray | None = None,
+    seasonal_A: np.ndarray | None = None,
+    seasonal_B: np.ndarray | None = None,
 ) -> np.ndarray:
     """Create a coherence matrix at each pixel.
 
@@ -137,6 +148,14 @@ def simulate_coh_stack(
         Coherence decay time constant for each pixel.
     signal : np.ndarray
         Simulated signal phase for each pixel.
+    seasonal_mask : np.ndarray, optional
+        Boolean mask to indicate, for each 2D pixel, whether to
+        use a seasonally decorelating model:
+        gamma = (A + B cos(2pi * t / 365))
+    seasonal_A : np.ndarray, optional
+        A coefficient for pixels whose `seasonal_mask=True`
+    seasonal_A : np.ndarray, optional
+        B coefficient for pixels whose `seasonal_mask=True`
 
     Returns
     -------
@@ -158,14 +177,23 @@ def simulate_coh_stack(
     else:
         phase_term = np.exp(1j * 0)
 
-    if seasonal_coeffs is not None:
-        A = np.atleast_2d(seasonal_coeffs.A)[:, :, None, None]
-        B = np.atleast_2d(seasonal_coeffs.B)[:, :, None, None]
+    if seasonal_mask is not None:
+        if seasonal_A is None or seasonal_B is None:
+            raise ValueError(
+                "Must provide `seasonal_A` and `seasonal_B` if passing `seasonal_mask`"
+            )
+        if seasonal_mask.dtype != bool:
+            raise ValueError("`seasonal_mask` must be a boolean array")
+        A = np.atleast_2d(seasonal_A)[:, :, None, None]
+        B = np.atleast_2d(seasonal_B)[:, :, None, None]
+        mask = np.atleast_2d(seasonal_mask)[:, :]
         # A, B = seasonal_coeffs.A, seasonal_coeffs.B
         # assert A.ndim == B.ndim == 4
         seasonal_factor = (A + B * np.cos(2 * np.pi * temp_baselines / 365.25)) ** 2
         # Ensure it is a valid coherence multiplier
         seasonal_factor = np.clip(seasonal_factor, 0, 1)
+        # Where
+        seasonal_factor[~mask, :, :] = 1.0
         gamma *= seasonal_factor
 
     C = gamma * phase_term

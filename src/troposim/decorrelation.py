@@ -1,6 +1,7 @@
 """Simulate phase noise from decorrelation."""
+
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 def simulate(

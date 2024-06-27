@@ -1,0 +1,27 @@
+name: mapping-gdal39
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - boto3
+  - dem_stitcher
+  - gdal[version='>=3.9']
+  - rioxarray
+  - rasterio
+  - matplotlib
+  - geopandas-base
+  - h5py
+  - jupyter
+  - ipywidgets
+  - ipyleaflet
+  - scipy
+  - numpy
+  - pydantic
+  - tqdm
+  - rich
+  - black
+  - ruff
+  - ca-certificates
+  - certifi
+  - openssl
+prefix: /Users/staniewi/miniconda3/envs/mapping-gdal39

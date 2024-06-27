@@ -1,76 +1,110 @@
 """Module for simple synthetic deformations, not following any real physical model"""
 
 import numpy as np
-import scipy.ndimage as ndi
 
 
 def gaussian(
     shape: tuple[int, int],
-    sigma: float,
+    sigma: float | tuple[float, float],
     row: int | None = None,
     col: int | None = None,
     normalize: bool = False,
     amp: float | None = None,
     noise_sigma: float = 0.0,
 ) -> np.ndarray:
-    """Create a gaussian bowl of given shape and width
+    """Create a 2D Gaussian of given shape and width.
 
     Parameters
     ----------
-    shape : tuple[int]
-        (rows, cols)
-    sigma : float
-        std dev of gaussian
-    row : int
-        center of blob. Defaults to None.
-    col : int
-        center col of blob. Defaults to None.
-    normalize : bool
-        Normalize the amplitude peak to 1.
-        Defaults to False.
-    amp : float
-        peak height of gaussian. Defaults to None.
-    noise_sigma : float
-        Std. dev of random gaussian noise added to image. (Default value = 0.0)
+    shape : tuple[int, int]
+        (rows, cols) of the output array
+    sigma : float or tuple[float, float]
+        Standard deviation of the Gaussian.
+        If one float provided, makes an isotropic Gaussian.
+        Otherwise, uses [sigma_row, sigma_col] to make elongated Gaussian.
+    row : int, optional
+        Center row of the Gaussian. Defaults to the middle of the array.
+    col : int, optional
+        Center column of the Gaussian. Defaults to the middle of the array.
+    normalize : bool, optional
+        Normalize the amplitude peak to 1. Defaults to False.
+    amp : float, optional
+        Peak height of Gaussian. If None, peak will be 1/(2*pi*sigma^2).
+    noise_sigma : float, optional
+        Std. dev of random Gaussian noise added to image. Defaults to 0.0.
 
     Returns
     -------
-    ndarray
+    np.ndarray
+        2D array containing the Gaussian
     """
-    d = delta(shape, row, col)
-    out = ndi.gaussian_filter(d, sigma, mode="constant") * sigma**2
-    normed = _normalize_gaussian(out, normalize=normalize, amp=amp)
+    rows, cols = shape
+    if not isinstance(sigma, tuple):
+        sigma = (sigma, sigma)
+    sy, sx = sigma
+
+    # Set default center if not provided
+    if row is None:
+        row = rows // 2
+    if col is None:
+        col = cols // 2
+
+    # Create coordinate grids
+    y, x = np.ogrid[:rows, :cols]
+
+    # Calculate the 2D Gaussian
+    g = np.exp(
+        -((x - col) ** 2.0 / (2.0 * sx**2.0) + (y - row) ** 2.0 / (2.0 * sy**2.0))
+    )
+    normed = _normalize_gaussian(g, normalize=normalize, amp=amp)
     if noise_sigma > 0:
         normed += noise_sigma * np.random.standard_normal(shape)
     return normed
 
 
-def delta(shape, row=None, col=None):
-    """Create a spike in the middle of an image
+def ramp(
+    shape: tuple[int, int], amplitude: float = 1, rotate_degrees: float = 0
+) -> np.ndarray:
+    """Create a synthetic ramp with optional rotation.
 
     Parameters
     ----------
-    shape : tuple[int]
-       size of image to make
-    row : int, optional
-        center row of spike, defaults to center of image
-    col : int, optional
-        center column of spike, defaults to center of image
+    shape : tuple[int, int]
+        (rows, cols) of the output array.
+    amplitude : float
+        The maximum amplitude the ramp reaches.
+        Default = 1.
+    rotate_degrees : float, optional
+        Rotation of the ramp in degrees. 0 degrees is a left-to-right ramp.
+        Positive values rotate counterclockwise. Defaults to 0.
 
     Returns
     -------
-    ndarray
-        An image with a spike of value 1 at the specified center
-
+    np.ndarray
+        2D array containing the synthetic ramp
     """
-    delta = np.zeros(shape)
     rows, cols = shape
-    if col is None:
-        col = cols // 2
-    if row is None:
-        row = rows // 2
-    delta[row, col] = 1
-    return delta
+
+    # Create coordinate grids
+    y, x = np.ogrid[:rows, :cols]
+
+    # Normalize coordinates to [-1, 1] range
+    x = (x - cols / 2) / (cols / 2)
+    y = (y - rows / 2) / (rows / 2)
+
+    # Convert rotation to radians
+    theta = np.radians(rotate_degrees)
+
+    # Apply rotation
+    x_rot = x * np.cos(theta) + y * np.sin(theta)
+
+    # Create ramp
+    ramp = (x_rot + 1) / 2  # Normalize to [0, 1] range
+
+    # Scale by amplitude
+    ramp *= amplitude
+
+    return ramp
 
 
 def _rotation_matrix(theta):
@@ -183,14 +217,14 @@ def gaussian_ellipse(
     return normed
 
 
-def valley(shape, rotate=0):
+def valley(shape, rotate_degrees=0):
     """Make a valley in image center (curvature only in 1 direction)"""
-    from skimage import transform
+    from scipy.ndimage import rotate
 
     rows, cols = shape
     out = np.dot(np.ones((rows, 1)), (np.linspace(-1, 1, cols) ** 2).reshape((1, cols)))
-    if rotate > 0:
-        out = transform.rotate(out, None, mode="edge")
+    if rotate_degrees > 0:
+        rotate(out, rotate_degrees, mode="edge", output=out)
     return out
 
 
