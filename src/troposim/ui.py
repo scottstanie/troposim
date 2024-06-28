@@ -84,6 +84,7 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
     )
     shape2d = rhos.shape[0], rhos.shape[1]
     shape3d = (inps.num_dates, shape2d[0], shape2d[1])
+    print(f"{profile=}")
     print(f"{shape3d = }")
     # propagation_phase = np.zeros(shape3d, dtype="float32")
     files = {}
@@ -232,9 +233,15 @@ def create_ramps(
 def create_stratified(dem, num_days, out_hdf5: PathOrStr):
     from . import stratified
 
-    stratified_kwargs = {"K_params": {"shape": (num_days,)}}
-    print(stratified_kwargs)
-    return stratified.simulate(dem, **stratified_kwargs)
+    shape2d = dem.shape
+    shape3d = (num_days, *shape2d)
+    # stratified_kwargs = {"K_params": {"shape": (num_days,)}}
+    # print(stratified_kwargs)
+    with h5py.File(out_hdf5, "w") as hf:
+        dset = hf.create_dataset("data", shape=shape3d, dtype="float32", **HDF5_KWARGS)
+        for idx in range(num_days):
+            n = stratified.simulate(dem)
+            dset.write_direct(n, dest_sel=idx)
 
 
 def create_turbulence(
