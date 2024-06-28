@@ -15,6 +15,9 @@ from ._types import Bbox, PathOrStr
 logger = logging.getLogger(__name__)
 COHERENCE_GPKG_ZIP = Path(__file__).parent / "data/global_coherence_layers.gti.gpkg.zip"
 COHERENCE_GDAL_PATH = f"/vsizip/{COHERENCE_GPKG_ZIP}/global_coherence_layers.gti.gpkg"
+COHERENCE_GPKG_TEMPLATE = "/vzizip/" + str(
+    Path(__file__).parent / "data/coherence_{season}_{variable}.gti.gpkg.zip"
+)
 
 
 class Season(Enum):
@@ -132,11 +135,10 @@ def get_rasters(
     variable = Variable(variable)
     season = Season(season)
 
-    # Construct the layer name
-    layer_name = f"coherence_{season.value.lower()}_{variable.value.lower()}"
-    # if variable == Variable.AMP:
-    #     layer_name = layer_name.replace("amp", "AMP")
-    with rasterio.open(COHERENCE_GDAL_PATH, layer=layer_name) as src:
+    gdal_path = COHERENCE_GPKG_TEMPLATE.format(
+        season=season.value, variable=variable.value
+    )
+    with rasterio.open(gdal_path) as src:
         # Get the window for the bounds
         window = windows.from_bounds(*bounds, src.transform)
 
@@ -156,6 +158,7 @@ def get_rasters(
 
     if convert_data:
         data = convert_to_float(data, variable)
+        # print(f"{season=} {variable=} {data.max()=}")
         profile.update(dtype=data.dtype)
 
     if shape is not None or (
@@ -173,7 +176,8 @@ def get_rasters(
         profile["transform"] *= Affine.scale(*upsample_factors[::-1])
 
     if outfile:
-        with rasterio.open(outfile, "w", **profile) as dst:
+        compression = {"compress": "lzw"}
+        with rasterio.open(outfile, "w", **(profile | compression)) as dst:
             dst.write(data, 1)
         logger.info(f"Raster data saved to {outfile}")
 
@@ -325,7 +329,7 @@ def fetch_rho_tau_amp(
     amp_stack = np.stack([t[0] for t in amps])
     # get one profile:
     profile = rhos[0][1]
-    return amp_stack, rho_stack, tau_stack, profile
+    return rho_stack, tau_stack, amp_stack, profile
 
 
 def get_coherence_model_coeffs(
@@ -352,7 +356,42 @@ def get_coherence_model_coeffs(
     rho_max = np.max(rho_stack, axis=0)
     tau_max = tau_stack.max(axis=0)
     amp_mean = np.mean(amp_stack, axis=0)
+    save_coherence_data(
+        output_dir / "global_coherence_data.h5",
+        amp_mean,
+        rho_max,
+        tau_max,
+        A,
+        B,
+        seasonal_mask,
+        profile,
+    )
     return amp_mean, rho_max, tau_max, A, B, seasonal_mask, profile
+
+
+def save_coherence_data(
+    outfile, amps, rhos, taus, seasonal_A, seasonal_B, seasonal_mask, profile
+):
+    import h5py
+
+    assert rhos.ndim == 2
+    assert (
+        rhos.shape
+        == taus.shape
+        == seasonal_A.shape
+        == seasonal_B.shape
+        == seasonal_mask.shape
+    )
+    with h5py.File(outfile, "w") as hf:
+        hf["amps"] = amps
+        hf["rhos"] = rhos
+        hf["taus"] = taus
+        hf["seasonal_A"] = seasonal_A
+        hf["seasonal_B"] = seasonal_B
+        hf["seasonal_mask"] = seasonal_mask
+        # could possibly serialize... but dont need now
+        # https://rasterio.groups.io/g/main/topic/serializing_and_deserializing/34163315
+        # hf["profile"] = profile
 
 
 def calculate_seasonal_coeffs(

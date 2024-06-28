@@ -40,7 +40,12 @@ class SimulationInputs(BaseModel):
     max_defo_amplitude: float = 5
 
 
-def create_simulation_data(inps: SimulationInputs):
+from functools import partial
+import jax.numpy as jnp
+from jax import Array, jit, random
+
+
+def create_simulation_data(inps: SimulationInputs, seed: int = 0):
     from . import global_coherence
     from . import covariance
 
@@ -69,12 +74,6 @@ def create_simulation_data(inps: SimulationInputs):
         )
     )
 
-    # print("Getting amplitudes")
-    # amplitudes, amp_prof = global_coherence.fetch_amplitudes(
-    #     bounds=inps.bounding_box,
-    #     output_dir=outdir,
-    #     upsample=upsample,
-    # )
     assert rhos.ndim == 2
     assert (
         rhos.shape
@@ -125,24 +124,19 @@ def create_simulation_data(inps: SimulationInputs):
             block_shape=BLOCK_SHAPE,
         )
     )
-    # with h5py.File("C_arrays.h5", "w") as hf_in, h5py.File("noisy_stack.h5", "w") as hf_out:
-    #     dset = hf_in.create_dataset(
-    #         "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
-    #     )
-    #     dset = hf_out.create_dataset(
-    #         "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
-    #     )
+    key = random.key(seed)
     with h5py.File("noisy_stack.h5", "w") as hf_out:
         dset_out = hf_out.create_dataset(
             "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
         )
         for rows, cols in b_iter:
+            key, subkey = random.split(key)
             print(f"Simulating correlated noise for {rows}, {cols}")
             C_arrays = covariance.simulate_coh_stack(
                 time=x_arr,
                 gamma_inf=rhos[rows, cols],
                 # the global coherence raster model assumes gamma0=1
-                gamma0=0.95 * np.ones_like(rhos[rows, cols]),
+                gamma0=0.99 * np.ones_like(rhos[rows, cols]),
                 Tau0=taus[rows, cols],
                 seasonal_A=seasonal_A[rows, cols],
                 seasonal_B=seasonal_B[rows, cols],
@@ -150,11 +144,14 @@ def create_simulation_data(inps: SimulationInputs):
             )
             propagation_phase = load_current_phase(files, rows, cols)
 
-            print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
-            noisy_stack = covariance.make_noisy_samples(
-                C=C_arrays, defo_stack=propagation_phase, amplitudes=amps[rows, cols]
+            # print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
+            # noisy_stack = covariance.make_noisy_samples(
+            noisy_stack = covariance.make_noisy_samples_jax(
+                subkey,
+                C=C_arrays,
+                defo_stack=propagation_phase,
+                amplitudes=amps[rows, cols],
             )
-            # dset_out.write_direct(noisy_stack, dest_sel=np.s_[:, rows, cols])
             dset_out[:, rows, cols] = noisy_stack
 
             # for date, layer in zip(time, noisy_stack):
