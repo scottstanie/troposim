@@ -15,8 +15,9 @@ from ._types import Bbox, PathOrStr
 logger = logging.getLogger(__name__)
 COHERENCE_GPKG_ZIP = Path(__file__).parent / "data/global_coherence_layers.gti.gpkg.zip"
 COHERENCE_GDAL_PATH = f"/vsizip/{COHERENCE_GPKG_ZIP}/global_coherence_layers.gti.gpkg"
-COHERENCE_GPKG_TEMPLATE = "/vzizip/" + str(
-    Path(__file__).parent / "data/coherence_{season}_{variable}.gti.gpkg.zip"
+COHERENCE_GPKG_TEMPLATE = "/vsizip/" + str(
+    Path(__file__).parent
+    / "data/coherence_{season}_{variable}.gti.gpkg.zip/coherence_{season}_{variable}.gti.gpkg"
 )
 
 
@@ -173,7 +174,7 @@ def get_rasters(
 
         # Update the profile with the new shape
         profile.update(height=shape[0], width=shape[1])
-        profile["transform"] *= Affine.scale(*upsample_factors[::-1])
+        profile["transform"] /= Affine.scale(*upsample_factors[::-1])
 
     if outfile:
         compression = {"compress": "lzw"}
