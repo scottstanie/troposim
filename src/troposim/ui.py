@@ -1,9 +1,6 @@
-import concurrent.futures
 import logging
-import threading
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Sequence
 
 import h5py
 import numpy as np
@@ -23,7 +20,7 @@ SEASONS = []
 HDF5_KWARGS = {"chunks": True, "compression": "gzip"}
 BLOCK_SHAPE = (256, 256)
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("troposim")
 
 
 class SimulationInputs(BaseModel):
@@ -45,9 +42,14 @@ class SimulationInputs(BaseModel):
     include_stratified: bool = False
 
 
-def create_simulation_data(inps: SimulationInputs, seed: int = 0):
-    from . import global_coherence
-    from . import covariance
+def create_simulation_data(
+    inps: SimulationInputs, seed: int = 0, verbose: bool = False
+):
+    from troposim import covariance, global_coherence
+
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        logger.addHandler(logging.StreamHandler())
 
     # from .deformation import synthetic
     # Create the times vector
@@ -66,36 +68,47 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
     upsample_y = int(round(90 / inps.res_y))
     upsample_x = int(round(90 / inps.res_x))
     upsample = (upsample_y, upsample_x)
-    print(f"Upsampling by {upsample}")
+    logger.info(f"Upsampling by {upsample}")
     # rasters, profiles = get_global_coherence(
     #     inps.bounding_box, outdir=outdir, upsample=(upsample_y, upsample_x)
     # )
-    print("Getting Rhos, Tau rasters")
-    (amps, rhos, taus, seasonal_A, seasonal_B, seasonal_mask, profile) = (
-        global_coherence.get_coherence_model_coeffs(
-            bounds=inps.bounding_box,
-            upsample=upsample,
-            output_dir=layers_dir,
-        )
+    logger.info("Getting Rhos, Tau rasters")
+    # (amps, rhos, taus, seasonal_A, seasonal_B, seasonal_mask, profile) = (
+    # (
+    #     amp_file,
+    #     rho_file,
+    #     tau_file,
+    #     seasonal_A_file,
+    #     seasonal_B_file,
+    #     seasonal_mask_file,
+    # ) = global_coherence.get_coherence_model_coeffs(
+    coherence_files = global_coherence.get_coherence_model_coeffs(
+        bounds=inps.bounding_box,
+        upsample=upsample,
+        output_dir=layers_dir,
     )
+    with rio.open(coherence_files[0]) as src:
+        shape2d = src.shape
+        profile = src.profile
 
-    assert rhos.ndim == 2
-    assert (
-        rhos.shape
-        == taus.shape
-        == seasonal_A.shape
-        == seasonal_B.shape
-        == seasonal_mask.shape
-    )
-    shape2d = rhos.shape[0], rhos.shape[1]
+    # assert rhos.ndim == 2
+    # assert (
+    #     rhos.shape
+    #     == taus.shape
+    #     == seasonal_A.shape
+    #     == seasonal_B.shape
+    #     == seasonal_mask.shape
+    # )
+    # shape2d = rhos.shape[0], rhos.shape[1]
+
     shape3d = (inps.num_dates, shape2d[0], shape2d[1])
-    print(f"{profile=}")
-    print(f"{shape3d = }")
+    logger.info(f"{profile=}")
+    logger.info(f"{shape3d = }")
     # propagation_phase = np.zeros(shape3d, dtype="float32")
     files = {}
     # signal = np.zeros_like(shape2d, dtype="float32") # deformation only
     if inps.include_turbulence:
-        print("Generating turbulence")
+        logger.info("Generating turbulence")
         files["turbulence"] = layers_dir / "turbulence.h5"
         create_turbulence(
             shape2d=shape2d, num_days=inps.num_dates, out_hdf5=files["turbulence"]
@@ -105,7 +118,7 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
         # Save:
         # prof = profile.copy()
     if inps.include_deformation:
-        print("Generating deformation")
+        logger.info("Generating deformation")
         files["deformation"] = layers_dir / "deformation.h5"
         create_defo_stack(
             shape=shape3d,
@@ -115,7 +128,7 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
         )
         # propagation_phase += defo_stack
     if inps.include_ramps:
-        print("Generating ramps")
+        logger.info("Generating ramps")
         files["phase_ramps"] = layers_dir / "phase_ramps.h5"
         create_ramps(
             shape2d=shape2d,
@@ -144,29 +157,30 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
     #     dset_out = hf_out.create_dataset(
     #         "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
     #     )
-    print("Creating coherence matrices for each pixel")
+    logger.info("Creating coherence matrices for each pixel")
     for rows, cols in tqdm(b_iter):
+        amps, rhos, taus, seasonal_A, seasonal_B, seasonal_mask = load_coherence_files(
+            coherence_files, rows, cols
+        )
+        if verbose:
+            tqdm.write(f"Simulating correlated noise for {rows}, {cols}")
         key, subkey = random.split(key)
-        tqdm.write(f"Simulating correlated noise for {rows}, {cols}")
         C_arrays = covariance.simulate_coh_stack(
             time=x_arr,
-            gamma_inf=rhos[rows, cols],
+            gamma_inf=rhos,
             # the global coherence raster model assumes gamma0=1
-            gamma0=0.99 * np.ones_like(rhos[rows, cols]),
-            Tau0=taus[rows, cols],
-            seasonal_A=seasonal_A[rows, cols],
-            seasonal_B=seasonal_B[rows, cols],
-            seasonal_mask=seasonal_mask[rows, cols],
+            gamma0=0.99 * np.ones_like(rhos),
+            Tau0=taus,
+            seasonal_A=seasonal_A,
+            seasonal_B=seasonal_B,
+            seasonal_mask=seasonal_mask,
         )
         propagation_phase = load_current_phase(files, rows, cols)
 
-        # print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
+        # logger.info(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
         # noisy_stack = covariance.make_noisy_samples(
         noisy_stack = covariance.make_noisy_samples_jax(
-            subkey,
-            C=C_arrays,
-            defo_stack=propagation_phase,
-            amplitudes=amps[rows, cols],
+            subkey, C=C_arrays, defo_stack=propagation_phase, amplitudes=amps
         )
         # dset_out[:, rows, cols] = noisy_stack
 
@@ -175,6 +189,38 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
             with rio.open(filename, "r+", **profile) as dst:
                 dst.write(layer, 1, window=window)
     return noisy_stack
+
+
+def load_coherence_files(
+    coherence_files: list[Path], rows: slice, cols: slice
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Load the coherence rasters for a block of pixels.
+
+    Parameters
+    ----------
+    coherence_files : list[Path]
+        List of paths to the coherence rasters.
+    rows : slice
+        Row slice to extract.
+    cols : slice
+        Column slice to extract.
+
+    """
+    # amp_file, rho_file, tau_file, seasonal_A_file, seasonal_B_file, seasonal_mask_file
+    assert len(coherence_files) == 6
+    out_arrays = []
+    for f in coherence_files:
+        with rio.open(f) as src:
+            data = src.read(
+                1, window=rasterio.windows.Window.from_slices(rows, cols), masked=True
+            )
+            if data.dtype == np.uint8:
+                data = data.filled(0).astype(bool)
+            else:
+                data = data.filled()
+            out_arrays.append(data)
+    return out_arrays
+    # return rhos, taus, seasonal_A, seasonal_B, seasonal_mask
 
 
 def load_current_phase(files: dict[str, Path], rows: slice, cols: slice) -> np.ndarray:
@@ -224,12 +270,20 @@ def load_current_phase(files: dict[str, Path], rows: slice, cols: slice) -> np.n
 
 
 def create_ramps(
-    shape2d: tuple[int, int], num_days: int, out_hdf5: PathOrStr, amplitude: float = 1
+    shape2d: tuple[int, int],
+    num_days: int,
+    out_hdf5: PathOrStr,
+    amplitude: float = 1,
+    overwrite: bool = False,
 ):
     from .deformation import synthetic
 
     shape3d = (num_days, *shape2d)
     rotations = np.random.randint(0, 360, size=(num_days,))
+    if Path(out_hdf5).exists() and not overwrite:
+        logger.info(f"Not overwriting {out_hdf5}")
+        return
+
     with h5py.File(out_hdf5, "w") as hf:
         dset = hf.create_dataset("data", shape=shape3d, dtype="float32", **HDF5_KWARGS)
         for idx, r in enumerate(rotations):
@@ -239,9 +293,12 @@ def create_ramps(
             dset.write_direct(ramp_phase, dest_sel=idx)
 
 
-def create_stratified(dem, num_days, out_hdf5: PathOrStr):
+def create_stratified(dem, num_days, out_hdf5: PathOrStr, overwrite: bool = False):
     from . import stratified
 
+    if Path(out_hdf5).exists() and not overwrite:
+        logger.info(f"Not overwriting {out_hdf5}")
+        return
     shape2d = dem.shape
     shape3d = (num_days, *shape2d)
     # stratified_kwargs = {"K_params": {"shape": (num_days,)}}
@@ -257,11 +314,15 @@ def create_turbulence(
     shape2d: tuple[int, int],
     num_days: int,
     out_hdf5: PathOrStr,
+    overwrite: bool = False,
     max_amplitude: float = 1.0,
     resolution: float = 30,
 ):
     from . import turbulence
 
+    if Path(out_hdf5).exists() and not overwrite:
+        logger.info(f"Not overwriting {out_hdf5}")
+        return
     shape3d = (num_days, *shape2d)
     max_amp_meters = max_amplitude / METERS_TO_PHASE
     with h5py.File(out_hdf5, "w") as hf:
@@ -278,6 +339,7 @@ def create_defo_stack(
     sigma: float,
     max_amplitude: float = 1,
     out_hdf5: PathOrStr | None = None,
+    overwrite: bool = False,
 ) -> np.ndarray | None:
     """Create the time series of deformation to add to each SAR date.
 
@@ -298,6 +360,10 @@ def create_defo_stack(
 
     """
     from .deformation.synthetic import gaussian
+
+    if Path(out_hdf5).exists() and not overwrite:
+        logger.info(f"Not overwriting {out_hdf5}")
+        return
 
     num_time_steps, rows, cols = shape
     shape2d = (rows, cols)

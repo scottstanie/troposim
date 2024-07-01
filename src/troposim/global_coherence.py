@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import rasterio
@@ -13,6 +13,7 @@ from rasterio import windows
 from ._types import Bbox, PathOrStr
 
 logger = logging.getLogger(__name__)
+
 COHERENCE_GPKG_ZIP = Path(__file__).parent / "data/global_coherence_layers.gti.gpkg.zip"
 COHERENCE_GDAL_PATH = f"/vsizip/{COHERENCE_GPKG_ZIP}/global_coherence_layers.gti.gpkg"
 COHERENCE_GPKG_TEMPLATE = "/vsizip/" + str(
@@ -67,6 +68,7 @@ def convert_to_float(X: np.ndarray, variable: Variable) -> np.ndarray:
     References
     ----------
     http://sentinel-1-global-coherence-earthbigdata.s3-website-us-west-2.amazonaws.com/
+
     """
     if variable == Variable.AMP:
         data = X.astype(float) ** 2 / 199526231
@@ -140,46 +142,62 @@ def get_rasters(
     gdal_path = COHERENCE_GPKG_TEMPLATE.format(
         season=season.value, variable=variable.value
     )
+
     with rasterio.open(gdal_path) as src:
+
         # Get the window for the bounds
         window = windows.from_bounds(*bounds, src.transform)
+        shape = shape or (window.height, window.width)
+
+        profile = src.profile.copy()
+        if upsample_factors is not None and upsample_factors != (1, 1):
+            shape = tuple(np.round(np.array(shape) * upsample_factors).astype(int))
+            # shape = int(
+            #     shape[0] * upsample_factors[0], int(shape[1] * upsample_factors[1])
+            # )
 
         # Read the data
-        data = src.read(1, window=window)
+        data = src.read(
+            1,
+            window=window,
+            out_shape=shape,
+            resampling=rasterio.enums.Resampling.bilinear,
+        )
 
+        transform_scale = Affine.scale(
+            window.width / data.shape[-1], window.height / data.shape[-2]
+        )
         # Get the profile for the windowed read
-        profile = src.profile.copy()
         profile.update(
             {
-                "height": window.height,
-                "width": window.width,
-                "transform": windows.transform(window, src.transform),
+                "height": data.shape[-2],
+                "width": data.shape[-1],
+                "transform": windows.transform(window, src.transform) * transform_scale,
                 "driver": "GTiff",
             }
         )
 
-    if convert_data:
         data = convert_to_float(data, variable)
         # print(f"{season=} {variable=} {data.max()=}")
-        profile.update(dtype="float16")
+        profile.update(dtype="float32")
 
-    if shape is not None or (
-        upsample_factors is not None and upsample_factors != (1, 1)
-    ):
-        if shape is None:
-            shape = (
-                int(profile["height"] * upsample_factors[0]),
-                int(profile["width"] * upsample_factors[1]),
-            )
-        data = _interpolate_data(data, shape, method=interp_method)
+    # if shape is not None or (
+    #     upsample_factors is not None and upsample_factors != (1, 1)
+    # ):
+    #     if shape is None:
+    #         shape = (
+    #             int(profile["height"] * upsample_factors[0]),
+    #             int(profile["width"] * upsample_factors[1]),
+    #         )
+    #     data = _interpolate_data(data, shape, method=interp_method)
 
-        # Update the profile with the new shape
-        profile.update(height=shape[0], width=shape[1])
-        profile["transform"] *= Affine.scale(
-            1 / upsample_factors[1], 1 / upsample_factors[0]
-        )
+    #     # Update the profile with the new shape
+    #     profile.update(height=shape[0], width=shape[1])
+    #     profile["transform"] *= Affine.scale(
+    #         1 / upsample_factors[1], 1 / upsample_factors[0]
+    #     )
 
-    data = data.astype("float16")
+    # data = data.astype("float16")
     if outfile:
         compression = {"compress": "lzw", "nbits": "16"}
         with rasterio.open(outfile, "w", **(profile | compression)) as dst:
@@ -226,6 +244,7 @@ def model_2param(t: np.ndarray, rho_inf: float, tau: float, *args) -> np.ndarray
     -------
     np.ndarray
         Array of coherence values.
+
     """
     return (1 - rho_inf) * np.exp(-t / tau) + rho_inf
 
@@ -248,6 +267,7 @@ def model_3param(t: np.ndarray, rho_0: float, rho_inf: float, tau: float) -> np.
     -------
     np.ndarray
         Array of coherence values.
+
     """
     return (rho_0 - rho_inf) * np.exp(-t / tau) + rho_inf
 
@@ -293,25 +313,55 @@ def fit_model(
     return popt, pcov
 
 
+from collections.abc import Callable
+from concurrent.futures import Executor, Future
+from typing import ParamSpec, TypeVar
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+class DummyProcessPoolExecutor(Executor):
+    """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
+
+    def __init__(self, max_workers: int | None = None, **kwargs):  # noqa: D107
+        self._max_workers = max_workers
+
+    def submit(  # noqa: D102
+        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> Future[T]:
+        future: Future = Future()
+        result = fn(*args, **kwargs)
+        future.set_result(result)
+        return future
+
+    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa: D102
+        pass
+
+
 def fetch_rho_tau_amp(
     bounds: Bbox,
     upsample: tuple[int, int] = (1, 1),
     output_dir=Path(),
-    max_workers: int = 4
+    max_workers: int = 1,
 ):
-    def fetch_single(variable, season):
-        return get_rasters(
+    def fetch_single(variable, season) -> Path:
+        outfile = output_dir / f"{variable}_{season}.tif"
+        get_rasters(
             bounds,
             season=season,
             variable=variable,
-            outfile=output_dir / f"{variable}_{season}.tif",
+            outfile=outfile,
             upsample_factors=upsample,
         )
+        return outfile
 
     seasons = [s.value for s in Season]
 
     results = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    Executor = DummyProcessPoolExecutor if max_workers == 1 else ThreadPoolExecutor
+    fetch_single("rho", "winter")
+    with Executor(max_workers=max_workers) as executor:
         future_to_params = {
             executor.submit(fetch_single, variable, season): (variable, season)
             for season in seasons
@@ -325,25 +375,26 @@ def fetch_rho_tau_amp(
             except Exception as exc:
                 print(f"{variable}_{season} generated an exception: {exc}")
 
-    rhos = [results[("rho", season)] for season in seasons]
-    taus = [results[("tau", season)] for season in seasons]
-    amps = [results[("amp", season)] for season in seasons]
+    rho_files = [results[("rho", season)] for season in seasons]
+    tau_files = [results[("tau", season)] for season in seasons]
+    amp_files = [results[("amp", season)] for season in seasons]
+    return rho_files, tau_files, amp_files
 
-    # Pick out the array, not the profile
-    rho_stack = np.stack([r[0] for r in rhos])
-    tau_stack = np.stack([t[0] for t in taus])
-    amp_stack = np.stack([t[0] for t in amps])
-    # get one profile:
-    profile = rhos[0][1]
-    return rho_stack, tau_stack, amp_stack, profile
+    # # Pick out the array, not the profile
+    # rho_stack = np.stack([r[0] for r in rhos])
+    # tau_stack = np.stack([t[0] for t in taus])
+    # amp_stack = np.stack([t[0] for t in amps])
+    # # get one profile:
+    # profile = rhos[0][1]
+    # return rho_stack, tau_stack, amp_stack, profile
 
 
 def get_coherence_model_coeffs(
     bounds: Bbox,
     seasonal_ptp_cutoff: float = 0.5,
     upsample: tuple[int, int] = (1, 1),
-    output_dir: Path = Path("."),
-    max_workers: int = 4
+    output_dir: Path = Path(),
+    max_workers: int = 4,
 ) -> tuple[
     np.ndarray,
     np.ndarray,
@@ -353,27 +404,52 @@ def get_coherence_model_coeffs(
     np.ndarray,
     dict[str, Any],
 ]:
-    rho_stack, tau_stack, amp_stack, profile = fetch_rho_tau_amp(
-        bounds=bounds, upsample=upsample, output_dir=output_dir, max_workers=max_workers,
+    # rho_stack, tau_stack, amp_stack, profile = fetch_rho_tau_amp(
+    rho_files, tau_files, amp_files = fetch_rho_tau_amp(
+        bounds=bounds,
+        upsample=upsample,
+        output_dir=output_dir,
+        max_workers=max_workers,
     )
 
-    A, B, seasonal_mask = calculate_seasonal_coeffs(
-        rho_stack=rho_stack, seasonal_ptp_cutoff=seasonal_ptp_cutoff
+    # A, B, seasonal_mask = calculate_seasonal_coeffs(
+    # rho_stack=rho_stack, seasonal_ptp_cutoff=seasonal_ptp_cutoff
+
+    (
+        amp_mean_file,
+        rho_max_file,
+        tau_max_file,
+        seasonal_A_file,
+        seasonal_B_file,
+        seasonal_mask_file,
+    ) = calculate_seasonal_coeffs_files(
+        rho_files=rho_files,
+        tau_files=tau_files,
+        amp_files=amp_files,
+        seasonal_ptp_cutoff=seasonal_ptp_cutoff,
     )
-    rho_max = np.max(rho_stack, axis=0)
-    tau_max = tau_stack.max(axis=0)
-    amp_mean = np.mean(amp_stack, axis=0)
-    save_coherence_data(
-        output_dir / "global_coherence_data.h5",
-        amp_mean,
-        rho_max,
-        tau_max,
-        A,
-        B,
-        seasonal_mask,
-        profile,
+    return (
+        amp_mean_file,
+        rho_max_file,
+        tau_max_file,
+        seasonal_A_file,
+        seasonal_B_file,
+        seasonal_mask_file,
     )
-    return amp_mean, rho_max, tau_max, A, B, seasonal_mask, profile
+    # rho_max = np.max(rho_stack, axis=0)
+    # tau_max = tau_stack.max(axis=0)
+    # amp_mean = np.mean(amp_stack, axis=0)
+    # save_coherence_data(
+    #     output_dir / "global_coherence_data.h5",
+    #     amp_mean,
+    #     rho_max,
+    #     tau_max,
+    #     A,
+    #     B,
+    #     seasonal_mask,
+    #     profile,
+    # )
+    # return amp_mean, rho_max, tau_max, A, B, seasonal_mask, profile
 
 
 def save_coherence_data(
@@ -402,7 +478,9 @@ def save_coherence_data(
 
 
 def calculate_seasonal_coeffs(
-    rho_stack: np.ndarray, seasonal_ptp_cutoff: float = 0.5
+    rho_stack: np.ndarray | None = None,
+    rho_files: Sequence[Path] | None = None,
+    seasonal_ptp_cutoff: float = 0.5,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     rho_ptp = np.ptp(rho_stack, axis=0)
     # For pixels where there's more than `seasonal_ptp_cutoff`, we'll model the decorrelation
@@ -413,6 +491,87 @@ def calculate_seasonal_coeffs(
     A, B = rho_to_AB(rho_min)
     # otherwise,  we just do an exponential decay
     return A, B, seasonal_pixels
+
+
+def _log_and_run(cmd: str):
+    import subprocess
+
+    logger.info(cmd)
+    # print(cmd)
+    subprocess.run(cmd, shell=True, check=True)
+
+
+def calculate_seasonal_coeffs_files(
+    rho_files: Sequence[Path],
+    tau_files: Sequence[Path],
+    amp_files: Sequence[Path],
+    seasonal_ptp_cutoff: float = 0.5,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute the seasonal A and B parameters from a list of rho files."""
+    # Using gdal calc, we can avoid loading everything, and it will save to a new file
+    common_opts = " --co TILED=YES --co COMPRESS=LZW --co BIGTIFF=YES"
+    common_opts += " --co NBITS=16 --NoDataValue 0 "
+
+    base_cmd = f"gdal_calc --quiet {common_opts} "
+    # Get the mean of the amp files:
+    amp_mean_out = amp_files[0].parent / "amp_mean.tif"
+    cmd = f"{base_cmd} '-A' {' '.join(map(str, amp_files))} --outfile={amp_mean_out} --calc='numpy.mean(A,axis=0)'"
+    if not amp_mean_out.exists():
+        _log_and_run(cmd)
+
+    # Like the example  https://gdal.org/programs/gdal_calc.html
+    # gdal_calc -A input1.tif input2.tif input3.tif --outfile=result.tif --calc="numpy.max(A,axis=0)"
+    # Get the peak-to-peak raster first:
+    a, b, c, d = rho_files
+    ptp_out = a.parent / "rho_ptp.tif"
+    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={ptp_out} --calc='numpy.ptp(A,axis=0)'"
+    if not ptp_out.exists():
+        _log_and_run(cmd)
+
+    # Get the minimum of rho:
+    rho_min_out = a.parent / "rho_min_out.tif"
+    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={rho_min_out} --calc='numpy.min(A,axis=0)'"
+    if not rho_min_out.exists():
+        _log_and_run(cmd)
+
+    # Get the maximum of rho:
+    rho_max_out = a.parent / "rho_max.tif"
+    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={rho_max_out} --calc='numpy.max(A,axis=0)'"
+    if not rho_max_out.exists():
+        _log_and_run(cmd)
+
+    # Calculate the seasonal mask:
+    seasonal_mask_out = a.parent / "seasonal_mask.tif"
+    cmd = f"{base_cmd} -A {ptp_out} --outfile={seasonal_mask_out} --calc='numpy.where(A > {seasonal_ptp_cutoff}, 1, 0)' --NoDataValue=255 --type=Byte"
+    if not seasonal_mask_out.exists():
+        _log_and_run(cmd)
+
+    # Calculate seasonal_A.tif
+    seasonal_A_out = a.parent / "seasonal_A.tif"
+    cmd = f"{base_cmd} -A {rho_min_out} --outfile={seasonal_A_out} --calc='0.5 * (1 + numpy.sqrt(A))'"
+    if not seasonal_A_out.exists():
+        _log_and_run(cmd)
+
+    # Calculate seasonal_B.tif
+    seasonal_B_out = a.parent / "seasonal_B.tif"
+    cmd = f"{base_cmd} -A {rho_min_out} --outfile={seasonal_B_out} --calc='0.5 * (1 - numpy.sqrt(A))'"
+    if not seasonal_B_out.exists():
+        _log_and_run(cmd)
+
+    # Get the maximum of tau:
+    tau_max_out = a.parent / "tau_max.tif"
+    cmd = f"{base_cmd} -A {' '.join(map(str, tau_files))} --outfile={tau_max_out} --calc='numpy.max(A,axis=0)'"
+    if not tau_max_out.exists():
+        _log_and_run(cmd)
+
+    return (
+        amp_mean_out,
+        rho_max_out,
+        tau_max_out,
+        seasonal_A_out,
+        seasonal_B_out,
+        seasonal_mask_out,
+    )
 
 
 def rho_to_AB(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
