@@ -45,13 +45,35 @@ class SimulationInputs(BaseModel):
 def create_simulation_data(
     inps: SimulationInputs, seed: int = 0, verbose: bool = False
 ):
+    """Create realistic SLC simulated data.
+
+    This function generates the necessary data layers for a TropoSim simulation, including
+    turbulence, deformation, and phase ramps. It loads the global coherence model
+    coefficients and uses them to simulate correlated noise for each pixel in the
+    simulation domain.
+
+    Parameters
+    ----------
+    inps : SimulationInputs
+        Input parameters for the simulation, including the bounding box, resolution,
+        number of dates, and flags for including various components.
+    seed : int, optional
+        Seed for the random number generator, by default 0.
+    verbose : bool, optional
+        Whether to print additional progress information, by default False.
+
+    Returns
+    -------
+    np.ndarray
+        The simulated noisy stack of SLC data.
+
+    """
     from troposim import covariance, global_coherence
 
     if not logger.handlers:
         logger.setLevel(logging.INFO)
         logger.addHandler(logging.StreamHandler())
 
-    # from .deformation import synthetic
     # Create the times vector
     time = [
         inps.start_date + idx * timedelta(days=inps.dt) for idx in range(inps.num_dates)
@@ -276,6 +298,27 @@ def create_ramps(
     amplitude: float = 1,
     overwrite: bool = False,
 ):
+    """Create a stack of ramp phase data for a given shape and number of days.
+
+    Parameters
+    ----------
+    shape2d : tuple[int, int]
+        The 2D shape of the ramp data.
+    num_days : int
+        The number of days to generate ramp data for.
+    out_hdf5 : PathOrStr
+        The output HDF5 file path to save the ramp data.
+    amplitude : float, optional
+        The maximum amplitude of the ramp, by default 1.
+    overwrite : bool, optional
+        Whether to overwrite the output file if it already exists, by default False.
+
+    Returns
+    -------
+    None
+        The ramp data is saved to the specified HDF5 file.
+
+    """
     from .deformation import synthetic
 
     shape3d = (num_days, *shape2d)
@@ -294,6 +337,25 @@ def create_ramps(
 
 
 def create_stratified(dem, num_days, out_hdf5: PathOrStr, overwrite: bool = False):
+    """Create a stack of stratified atmospheric noise for a given DEM.
+
+    Parameters
+    ----------
+    dem : np.ndarray
+        The digital elevation model (DEM) to use for generating the stratified phase.
+    num_days : int
+        The number of days to generate stratified phase data for.
+    out_hdf5 : PathOrStr
+        The output HDF5 file path to save the stratified phase data.
+    overwrite : bool, optional
+        Whether to overwrite the output file if it already exists, by default False.
+
+    Returns
+    -------
+    None
+        The stratified phase data is saved to the specified HDF5 file.
+
+    """
     from . import stratified
 
     if Path(out_hdf5).exists() and not overwrite:
@@ -318,6 +380,29 @@ def create_turbulence(
     max_amplitude: float = 1.0,
     resolution: float = 30,
 ):
+    """Create a stack of turbulent atmospheric noise.
+
+    Parameters
+    ----------
+    shape2d : tuple[int, int]
+        The 2D shape (rows, cols) of the output data.
+    num_days : int
+        The number of days to generate turbulence data for.
+    out_hdf5 : PathOrStr
+        The output HDF5 file path to save the turbulence data.
+    overwrite : bool, optional
+        Whether to overwrite the output file if it already exists, by default False.
+    max_amplitude : float, optional
+        The maximum amplitude of the turbulence, by default 1.0.
+    resolution : float, optional
+        The resolution of the turbulence simulation, by default 30.
+
+    Returns
+    -------
+    None
+        The turbulence data is saved to the specified HDF5 file.
+
+    """
     from . import turbulence
 
     if Path(out_hdf5).exists() and not overwrite:
@@ -351,6 +436,10 @@ def create_defo_stack(
         Standard deviation of the Gaussian deformation.
     max_amplitude : float, optional
         Maximum amplitude of the final deformation. Defaults to 1.
+    out_hdf5 : PathOrStr | None, optional
+        Path to output HDF5 file, by default None. If None, the deformation is not saved to disk.
+    overwrite : bool, optional
+        Whether to overwrite the output file if it already exists, by default False.
 
     Returns
     -------
@@ -380,6 +469,18 @@ def create_defo_stack(
 
 
 def fetch_dem(bounds: Bbox, output_dir: Path, upsample_factor: tuple[int, int]):
+    """Download and stitch a DEM (Digital Elevation Model) for the given bounding box.
+
+    Parameters
+    ----------
+    bounds : Bbox
+        The bounding box to download the DEM for.
+    output_dir : Path
+        The directory to save the DEM file to.
+    upsample_factor : tuple[int, int]
+        The factors to upsample the DEM in the y and x dimensions.
+
+    """
     from sardem import cop_dem
 
     cop_dem.download_and_stitch(
