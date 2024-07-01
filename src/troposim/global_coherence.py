@@ -174,7 +174,9 @@ def get_rasters(
 
         # Update the profile with the new shape
         profile.update(height=shape[0], width=shape[1])
-        profile["transform"] /= Affine.scale(*upsample_factors[::-1])
+        profile["transform"] *= Affine.scale(
+            1 / upsample_factors[1], 1 / upsample_factors[0]
+        )
 
     if outfile:
         compression = {"compress": "lzw"}
