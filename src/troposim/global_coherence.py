@@ -144,7 +144,6 @@ def get_rasters(
     )
 
     with rasterio.open(gdal_path) as src:
-
         # Get the window for the bounds
         window = windows.from_bounds(*bounds, src.transform)
         shape = shape or (window.height, window.width)
@@ -515,7 +514,7 @@ def calculate_seasonal_coeffs_files(
     base_cmd = f"gdal_calc --quiet {common_opts} "
     # Get the mean of the amp files:
     amp_mean_out = amp_files[0].parent / "amp_mean.tif"
-    cmd = f"{base_cmd} '-A' {' '.join(map(str, amp_files))} --outfile={amp_mean_out} --calc='numpy.mean(A,axis=0)'"
+    cmd = f"{base_cmd} -A {' '.join(map(str, amp_files))} --outfile={amp_mean_out} --calc='numpy.mean(A,axis=0)'"
     if not amp_mean_out.exists():
         _log_and_run(cmd)
 
