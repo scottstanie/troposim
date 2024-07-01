@@ -130,7 +130,11 @@ def create_simulation_data(
         logger.info("Generating turbulence")
         files["turbulence"] = layers_dir / "turbulence.h5"
         create_turbulence(
-            shape2d=shape2d, num_days=inps.num_dates, out_hdf5=files["turbulence"]
+            shape2d=shape2d,
+            num_days=inps.num_dates,
+            out_hdf5=files["turbulence"],
+            max_amplitude=inps.max_turbulence_amplitude,
+            resolution=(inps.res_y, inps.res_x),
         )
         # propagation_phase += turb_stack
         # signal += turb_stack
@@ -375,7 +379,7 @@ def create_turbulence(
     out_hdf5: PathOrStr,
     overwrite: bool = False,
     max_amplitude: float = 1.0,
-    resolution: float = 30,
+    resolution: tuple[float, float] = (30, 30),
 ):
     """Create a stack of turbulent atmospheric noise.
 
@@ -391,8 +395,8 @@ def create_turbulence(
         Whether to overwrite the output file if it already exists, by default False.
     max_amplitude : float, optional
         The maximum amplitude of the turbulence, by default 1.0.
-    resolution : float, optional
-        The resolution of the turbulence simulation, by default 30.
+    resolution : tuple[float, float], optional
+        The resolution (in meters) of the turbulence simulation, by default [30, 30]
 
     Returns
     -------
@@ -407,13 +411,22 @@ def create_turbulence(
         return
     shape3d = (num_days, *shape2d)
     max_amp_meters = max_amplitude / METERS_TO_PHASE
+    # Since it's slow to simulate a huge turbulence field at 10 meters, and it's
+    # generally not necessary to go that high res, we'll use 60 meters, then upsample
+    # to full scale
+    res_y, res_x = resolution
+    upsample_y = int(round(60 / res_y))
+    upsample_x = int(round(60 / res_x))
     with h5py.File(out_hdf5, "w") as hf:
         dset = hf.create_dataset("data", shape=shape3d, dtype="float32", **HDF5_KWARGS)
         for idx in tqdm(list(range(num_days))):
+            shape2d_down = (shape2d[0] // upsample_y, shape2d[1] // upsample_x)
             turb_meters = turbulence.simulate(
-                shape=shape2d, resolution=resolution, max_amp=max_amp_meters
+                shape=shape2d_down, resolution=60, max_amp=max_amp_meters
             )
-            dset.write_direct(turb_meters * METERS_TO_PHASE, dest_sel=idx)
+            # Get the final raster by upsampling the smaller turbulence
+            turb_rad = _interpolate_data(turb_meters * METERS_TO_PHASE, shape=shape2d)
+            dset.write_direct(turb_rad, dest_sel=idx)
 
 
 def create_defo_stack(
@@ -499,3 +512,24 @@ def _setup_logging():
         )
         h.setFormatter(formatter)
         logger.addHandler(h)
+
+
+def _interpolate_data(
+    data: np.ndarray, shape: tuple[int, int], method="linear"
+) -> np.ndarray:
+    from scipy.interpolate import RegularGridInterpolator
+
+    # Create coordinate arrays for the original data
+    orig_coords = [np.linspace(0, 1, s) for s in data.shape]
+
+    # Create coordinate arrays for the desired output shape
+    new_coords = [np.linspace(0, 1, s) for s in shape]
+
+    # Create the interpolator
+    interp = RegularGridInterpolator(orig_coords, data, method=method)
+
+    # Create a mesh grid for the new coordinates
+    mesh = np.meshgrid(*new_coords, indexing="xy", sparse=True)
+
+    # Perform the interpolation
+    return interp(np.array(mesh).T)

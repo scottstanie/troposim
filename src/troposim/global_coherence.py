@@ -206,27 +206,6 @@ def get_rasters(
     return data, profile
 
 
-def _interpolate_data(
-    data: np.ndarray, shape: tuple[int, int], method="linear"
-) -> np.ndarray:
-    from scipy.interpolate import RegularGridInterpolator
-
-    # Create coordinate arrays for the original data
-    orig_coords = [np.linspace(0, 1, s) for s in data.shape]
-
-    # Create coordinate arrays for the desired output shape
-    new_coords = [np.linspace(0, 1, s) for s in shape]
-
-    # Create the interpolator
-    interp = RegularGridInterpolator(orig_coords, data, method=method)
-
-    # Create a mesh grid for the new coordinates
-    mesh = np.meshgrid(*new_coords, indexing="xy", sparse=True)
-
-    # Perform the interpolation
-    return interp(np.array(mesh).T)
-
-
 def model_2param(t: np.ndarray, rho_inf: float, tau: float, *args) -> np.ndarray:
     """Two-parameter model for coherence decay.
 
@@ -416,7 +395,7 @@ def get_coherence_model_coeffs(
 
     (
         amp_mean_file,
-        rho_max_file,
+        rho_min_file,
         tau_max_file,
         seasonal_A_file,
         seasonal_B_file,
@@ -429,26 +408,26 @@ def get_coherence_model_coeffs(
     )
     return (
         amp_mean_file,
-        rho_max_file,
+        rho_min_file,
         tau_max_file,
         seasonal_A_file,
         seasonal_B_file,
         seasonal_mask_file,
     )
-    # rho_max = np.max(rho_stack, axis=0)
+    # rho_min = np.max(rho_stack, axis=0)
     # tau_max = tau_stack.max(axis=0)
     # amp_mean = np.mean(amp_stack, axis=0)
     # save_coherence_data(
     #     output_dir / "global_coherence_data.h5",
     #     amp_mean,
-    #     rho_max,
+    #     rho_min,
     #     tau_max,
     #     A,
     #     B,
     #     seasonal_mask,
     #     profile,
     # )
-    # return amp_mean, rho_max, tau_max, A, B, seasonal_mask, profile
+    # return amp_mean, rho_min, tau_max, A, B, seasonal_mask, profile
 
 
 def save_coherence_data(
@@ -532,9 +511,9 @@ def calculate_seasonal_coeffs_files(
         _log_and_run(cmd)
 
     # Get the maximum of rho:
-    rho_max_out = a.parent / "rho_max.tif"
-    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={rho_max_out} --calc='numpy.max(A,axis=0)'"
-    if not rho_max_out.exists():
+    rho_min_out = a.parent / "rho_min.tif"
+    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={rho_min_out} --calc='numpy.max(A,axis=0)'"
+    if not rho_min_out.exists():
         _log_and_run(cmd)
 
     # Calculate the seasonal mask:
@@ -563,7 +542,7 @@ def calculate_seasonal_coeffs_files(
 
     return (
         amp_mean_out,
-        rho_max_out,
+        rho_min_out,
         tau_max_out,
         seasonal_A_out,
         seasonal_B_out,
