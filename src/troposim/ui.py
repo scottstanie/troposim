@@ -47,10 +47,9 @@ def create_simulation_data(
 ):
     """Create realistic SLC simulated data.
 
-    This function generates the necessary data layers for a TropoSim simulation, including
+    This function generates the necessary data layers for a simulation, including
     turbulence, deformation, and phase ramps. It loads the global coherence model
-    coefficients and uses them to simulate correlated noise for each pixel in the
-    simulation domain.
+    coefficients and uses them to simulate correlated noise for each pixel.
 
     Parameters
     ----------
@@ -70,11 +69,9 @@ def create_simulation_data(
     """
     from troposim import covariance, global_coherence
 
-    if not logger.handlers:
-        logger.setLevel(logging.INFO)
-        logger.addHandler(logging.StreamHandler())
+    _setup_logging()
 
-    # Create the times vector
+    # Create list of SLC dates
     time = [
         inps.start_date + idx * timedelta(days=inps.dt) for idx in range(inps.num_dates)
     ]
@@ -491,3 +488,14 @@ def fetch_dem(bounds: Bbox, output_dir: Path, upsample_factor: tuple[int, int]):
         output_format="GTiff",
         output_type="float32",
     )
+
+
+def _setup_logging():
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        h = logging.StreamHandler()
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        h.setFormatter(formatter)
+        logger.addHandler(h)

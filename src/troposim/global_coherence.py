@@ -477,9 +477,7 @@ def save_coherence_data(
 
 
 def calculate_seasonal_coeffs(
-    rho_stack: np.ndarray | None = None,
-    rho_files: Sequence[Path] | None = None,
-    seasonal_ptp_cutoff: float = 0.5,
+    rho_stack: np.ndarray, seasonal_ptp_cutoff: float = 0.5
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     rho_ptp = np.ptp(rho_stack, axis=0)
     # For pixels where there's more than `seasonal_ptp_cutoff`, we'll model the decorrelation
