@@ -409,7 +409,7 @@ def create_turbulence(
     max_amp_meters = max_amplitude / METERS_TO_PHASE
     with h5py.File(out_hdf5, "w") as hf:
         dset = hf.create_dataset("data", shape=shape3d, dtype="float32", **HDF5_KWARGS)
-        for idx in tqdm(range(num_days)):
+        for idx in tqdm(list(range(num_days))):
             turb_meters = turbulence.simulate(
                 shape=shape2d, resolution=resolution, max_amp=max_amp_meters
             )
@@ -461,7 +461,7 @@ def create_defo_stack(
 
     with h5py.File(out_hdf5, "w") as hf:
         dset = hf.create_dataset("data", shape=shape, dtype="float32", **HDF5_KWARGS)
-        for idx, t in tqdm(enumerate(time_evolution)):
+        for idx, t in tqdm(list(enumerate(time_evolution))):
             dset.write_direct(final_defo * t, dest_sel=idx)
 
 

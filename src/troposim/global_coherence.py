@@ -342,7 +342,7 @@ def fetch_rho_tau_amp(
     bounds: Bbox,
     upsample: tuple[int, int] = (1, 1),
     output_dir=Path(),
-    max_workers: int = 1,
+    max_workers: int = 4,
 ):
     def fetch_single(variable, season) -> Path:
         outfile = output_dir / f"{variable}_{season}.tif"
