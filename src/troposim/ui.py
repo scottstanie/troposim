@@ -9,7 +9,10 @@ import h5py
 import numpy as np
 import rasterio
 import rasterio as rio
+import rasterio.windows
+from jax import random
 from pydantic import BaseModel, Field
+from tqdm.auto import tqdm
 
 from ._blocks import iter_blocks
 from ._types import Bbox, PathOrStr
@@ -17,7 +20,7 @@ from ._types import Bbox, PathOrStr
 SENTINEL_WAVELENGTH = 0.055465763  # meters
 METERS_TO_PHASE = 4 * 3.14159 / SENTINEL_WAVELENGTH
 SEASONS = []
-HDF5_KWARGS = {"chunks": True, "compression": "lzf"}
+HDF5_KWARGS = {"chunks": True, "compression": "gzip"}
 BLOCK_SHAPE = (256, 256)
 
 logger = logging.getLogger(__name__)
@@ -34,15 +37,12 @@ class SimulationInputs(BaseModel):
         ..., description="(left, bottom, right, top) in EPSG:4326"
     )
     include_turbulence: bool = True
+    max_turbulence_amplitude: float = 5
     include_deformation: bool = True
-    include_ramps: bool = True
-    # include_stratified: bool = True
     max_defo_amplitude: float = 5
-
-
-from functools import partial
-import jax.numpy as jnp
-from jax import Array, jit, random
+    include_ramps: bool = True
+    max_ramp_amplitude: float = 1.0
+    include_stratified: bool = False
 
 
 def create_simulation_data(inps: SimulationInputs, seed: int = 0):
@@ -57,6 +57,11 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
     x_arr = np.array([(t - time[0]).days for t in time])
 
     outdir = inps.output_dir
+    layers_dir = outdir / "input_layers"
+    output_slc_dir = outdir / "slcs"
+    layers_dir.mkdir(exist_ok=True, parents=True)
+    output_slc_dir.mkdir(exist_ok=True, parents=True)
+
     # The global coherence is at 90 meters:
     upsample_y = int(round(90 / inps.res_y))
     upsample_x = int(round(90 / inps.res_x))
@@ -70,7 +75,7 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
         global_coherence.get_coherence_model_coeffs(
             bounds=inps.bounding_box,
             upsample=upsample,
-            output_dir=outdir,
+            output_dir=layers_dir,
         )
     )
 
@@ -91,7 +96,7 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
     # signal = np.zeros_like(shape2d, dtype="float32") # deformation only
     if inps.include_turbulence:
         print("Generating turbulence")
-        files["turbulence"] = outdir / "turbulence.h5"
+        files["turbulence"] = layers_dir / "turbulence.h5"
         create_turbulence(
             shape2d=shape2d, num_days=inps.num_dates, out_hdf5=files["turbulence"]
         )
@@ -101,7 +106,7 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
         # prof = profile.copy()
     if inps.include_deformation:
         print("Generating deformation")
-        files["deformation"] = outdir / "deformation.h5"
+        files["deformation"] = layers_dir / "deformation.h5"
         create_defo_stack(
             shape=shape3d,
             sigma=shape2d[0] / 5,
@@ -111,14 +116,22 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
         # propagation_phase += defo_stack
     if inps.include_ramps:
         print("Generating ramps")
-        files["phase_ramps"] = outdir / "phase_ramps.h5"
+        files["phase_ramps"] = layers_dir / "phase_ramps.h5"
         create_ramps(
             shape2d=shape2d,
             num_days=inps.num_dates,
             out_hdf5=files["phase_ramps"],
         )
 
-    print("Creating coherence matrices for each pixel")
+    # Setup output tif files
+    output_slc_filenames = [
+        output_slc_dir / f"{date.strftime('%Y%m%d')}.slc.tif" for date in time
+    ]
+    slc_profile = profile.copy() | {"dtype": "complex64", "compression": "lzw"}
+    for filename in output_slc_filenames:
+        with rio.open(filename, "w", **slc_profile) as dst:
+            pass
+
     b_iter = list(
         iter_blocks(
             arr_shape=shape2d,
@@ -126,40 +139,41 @@ def create_simulation_data(inps: SimulationInputs, seed: int = 0):
         )
     )
     key = random.key(seed)
-    with h5py.File("noisy_stack.h5", "w") as hf_out:
-        dset_out = hf_out.create_dataset(
-            "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
+    # # If we want to write the SLCs to an HDF5 stack:
+    # with h5py.File("noisy_stack.h5", "w") as hf_out:
+    #     dset_out = hf_out.create_dataset(
+    #         "data", shape=shape3d, dtype="complex64", **HDF5_KWARGS
+    #     )
+    print("Creating coherence matrices for each pixel")
+    for rows, cols in tqdm(b_iter):
+        key, subkey = random.split(key)
+        tqdm.write(f"Simulating correlated noise for {rows}, {cols}")
+        C_arrays = covariance.simulate_coh_stack(
+            time=x_arr,
+            gamma_inf=rhos[rows, cols],
+            # the global coherence raster model assumes gamma0=1
+            gamma0=0.99 * np.ones_like(rhos[rows, cols]),
+            Tau0=taus[rows, cols],
+            seasonal_A=seasonal_A[rows, cols],
+            seasonal_B=seasonal_B[rows, cols],
+            seasonal_mask=seasonal_mask[rows, cols],
         )
-        for rows, cols in b_iter:
-            key, subkey = random.split(key)
-            print(f"Simulating correlated noise for {rows}, {cols}")
-            C_arrays = covariance.simulate_coh_stack(
-                time=x_arr,
-                gamma_inf=rhos[rows, cols],
-                # the global coherence raster model assumes gamma0=1
-                gamma0=0.99 * np.ones_like(rhos[rows, cols]),
-                Tau0=taus[rows, cols],
-                seasonal_A=seasonal_A[rows, cols],
-                seasonal_B=seasonal_B[rows, cols],
-                seasonal_mask=seasonal_mask[rows, cols],
-            )
-            propagation_phase = load_current_phase(files, rows, cols)
+        propagation_phase = load_current_phase(files, rows, cols)
 
-            # print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
-            # noisy_stack = covariance.make_noisy_samples(
-            noisy_stack = covariance.make_noisy_samples_jax(
-                subkey,
-                C=C_arrays,
-                defo_stack=propagation_phase,
-                amplitudes=amps[rows, cols],
-            )
-            dset_out[:, rows, cols] = noisy_stack
+        # print(C_arrays.shape, propagation_phase.shape, amps[rows, cols].shape)
+        # noisy_stack = covariance.make_noisy_samples(
+        noisy_stack = covariance.make_noisy_samples_jax(
+            subkey,
+            C=C_arrays,
+            defo_stack=propagation_phase,
+            amplitudes=amps[rows, cols],
+        )
+        # dset_out[:, rows, cols] = noisy_stack
 
-            # for date, layer in zip(time, noisy_stack):
-            #     filename = outdir / f"{date.strftime('%Y%m%d')}.slc.tif"
-
-            #     with rio.open(filename, "w", **profile) as dst:
-            #         dst.write(layer, 1)
+        window = rasterio.windows.Window.from_slices(rows, cols)
+        for filename, layer in zip(output_slc_filenames, noisy_stack):
+            with rio.open(filename, "r+", **profile) as dst:
+                dst.write(layer, 1, window=window)
     return noisy_stack
 
 
@@ -168,11 +182,11 @@ def load_current_phase(files: dict[str, Path], rows: slice, cols: slice) -> np.n
 
     Parameters
     ----------
-    files (Dict[str, Path])
+    files : dict[str, Path]
         Dictionary of file paths for different phase components.
-    rows (slice)
+    rows : slice
         Row slice to extract.
-    cols (slice)
+    cols : slice
         Column slice to extract.
 
     Returns
@@ -201,11 +215,6 @@ def load_current_phase(files: dict[str, Path], rows: slice, cols: slice) -> np.n
             if summed_phase is None:
                 summed_phase = data
             else:
-                # Ensure the shapes match before adding
-                if summed_phase.shape != data.shape:
-                    raise ValueError(
-                        f"Shape mismatch: {summed_phase.shape} vs {data.shape}"
-                    )
                 summed_phase += data
 
     if summed_phase is None:
@@ -248,15 +257,19 @@ def create_turbulence(
     shape2d: tuple[int, int],
     num_days: int,
     out_hdf5: PathOrStr,
+    max_amplitude: float = 1.0,
     resolution: float = 30,
 ):
     from . import turbulence
 
     shape3d = (num_days, *shape2d)
+    max_amp_meters = max_amplitude / METERS_TO_PHASE
     with h5py.File(out_hdf5, "w") as hf:
         dset = hf.create_dataset("data", shape=shape3d, dtype="float32", **HDF5_KWARGS)
         for idx in range(num_days):
-            turb_meters = turbulence.simulate(shape=shape2d, resolution=resolution)
+            turb_meters = turbulence.simulate(
+                shape=shape2d, resolution=resolution, max_amp=max_amp_meters
+            )
             dset.write_direct(turb_meters * METERS_TO_PHASE, dest_sel=idx)
 
 
@@ -300,81 +313,14 @@ def create_defo_stack(
             dset.write_direct(final_defo * t, dest_sel=idx)
 
 
-def fetch_dem(bounds: Bbox):
+def fetch_dem(bounds: Bbox, output_dir: Path, upsample_factor: tuple[int, int]):
     from sardem import cop_dem
 
     cop_dem.download_and_stitch(
-        output_name="dem.tif",
+        output_name=output_dir / "dem.tif",
         bbox=bounds,
-        xrate=1,
-        yrate=1,
+        yrate=upsample_factor[0],
+        xrate=upsample_factor[1],
         output_format="GTiff",
         output_type="float32",
     )
-
-
-def main(infile, outfile, num_workers=4):
-    """Process infile block-by-block and write to a new file
-
-    The output is the same as the input, but with band order
-    reversed.
-    """
-
-    with rasterio.open(infile) as src:
-        # Create a destination dataset based on source params. The
-        # destination will be tiled, and we'll process the tiles
-        # concurrently.
-        profile = src.profile
-        profile.update(blockxsize=128, blockysize=128, tiled=True)
-
-        with rasterio.open(outfile, "w", **src.profile) as dst:
-            windows = [window for ij, window in dst.block_windows()]
-
-            # We cannot write to the same file from multiple threads
-            # without causing race conditions. To safely read/write
-            # from multiple threads, we use a lock to protect the
-            # DatasetReader/Writer
-            read_lock = threading.Lock()
-            write_lock = threading.Lock()
-
-            def process(window):
-                with read_lock:
-                    src_array = src.read(window=window)
-
-                # The computation can be performed concurrently
-                # result = compute(src_array)
-
-                with write_lock:
-                    dst.write(result, window=window)
-
-            # We map the process() function over the list of
-            # windows.
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=num_workers
-            ) as executor:
-                executor.map(process, windows)
-
-
-# def get_global_coherence(
-#     bounds: Bbox, outdir=Path("."), upsample: tuple[int, int] = (1, 1)
-# ):
-#     from .global_coherence import get_rasters
-#     import rasterio as rio
-
-#     rasters = {}
-#     profiles = {}
-#     # TODO: need defaultdict
-#     for variable in ["rho", "tau"]:
-#         for season in ["fall", "winter", "spring", "summer"]:
-#             outname = outdir / f"coherence_{variable}_{season}.tif"
-#             if outname.exists():
-#                 with rio.open(outname) as src:
-#                     X = src.read(1)
-#                     p = src.profile.copy()
-#             else:
-#                 X, p = get_rasters(
-#                     bounds=bounds, season=season, upsample_factors=upsample
-#                 )
-#             rasters[season] = X
-#             profiles[season] = p
-#     return rasters, profiles
