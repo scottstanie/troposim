@@ -69,9 +69,10 @@ def convert_to_float(X: np.ndarray, variable: Variable) -> np.ndarray:
     http://sentinel-1-global-coherence-earthbigdata.s3-website-us-west-2.amazonaws.com/
     """
     if variable == Variable.AMP:
-        return X.astype("float32") ** 2 / 199526231
+        data = X.astype(float) ** 2 / 199526231
     else:
-        return X.astype("float32") / 1000.0
+        data = X.astype(float) / 1000.0
+    return data.astype("float32")
 
 
 def get_rasters(
@@ -160,7 +161,7 @@ def get_rasters(
     if convert_data:
         data = convert_to_float(data, variable)
         # print(f"{season=} {variable=} {data.max()=}")
-        profile.update(dtype=data.dtype)
+        profile.update(dtype="float16")
 
     if shape is not None or (
         upsample_factors is not None and upsample_factors != (1, 1)
@@ -178,8 +179,9 @@ def get_rasters(
             1 / upsample_factors[1], 1 / upsample_factors[0]
         )
 
+    data = data.astype("float16")
     if outfile:
-        compression = {"compress": "lzw"}
+        compression = {"compress": "lzw", "nbits": "16"}
         with rasterio.open(outfile, "w", **(profile | compression)) as dst:
             dst.write(data, 1)
         logger.info(f"Raster data saved to {outfile}")
@@ -202,7 +204,7 @@ def _interpolate_data(
     interp = RegularGridInterpolator(orig_coords, data, method=method)
 
     # Create a mesh grid for the new coordinates
-    mesh = np.meshgrid(*new_coords, indexing="xy")
+    mesh = np.meshgrid(*new_coords, indexing="xy", sparse=True)
 
     # Perform the interpolation
     return interp(np.array(mesh).T)
@@ -295,6 +297,7 @@ def fetch_rho_tau_amp(
     bounds: Bbox,
     upsample: tuple[int, int] = (1, 1),
     output_dir=Path(),
+    max_workers: int = 4
 ):
     def fetch_single(variable, season):
         return get_rasters(
@@ -308,7 +311,7 @@ def fetch_rho_tau_amp(
     seasons = [s.value for s in Season]
 
     results = {}
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_params = {
             executor.submit(fetch_single, variable, season): (variable, season)
             for season in seasons
@@ -339,7 +342,8 @@ def get_coherence_model_coeffs(
     bounds: Bbox,
     seasonal_ptp_cutoff: float = 0.5,
     upsample: tuple[int, int] = (1, 1),
-    output_dir=Path("."),
+    output_dir: Path = Path("."),
+    max_workers: int = 4
 ) -> tuple[
     np.ndarray,
     np.ndarray,
@@ -350,7 +354,7 @@ def get_coherence_model_coeffs(
     dict[str, Any],
 ]:
     rho_stack, tau_stack, amp_stack, profile = fetch_rho_tau_amp(
-        bounds=bounds, upsample=upsample, output_dir=output_dir
+        bounds=bounds, upsample=upsample, output_dir=output_dir, max_workers=max_workers,
     )
 
     A, B, seasonal_mask = calculate_seasonal_coeffs(
