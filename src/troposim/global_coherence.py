@@ -373,15 +373,7 @@ def get_coherence_model_coeffs(
     upsample: tuple[int, int] = (1, 1),
     output_dir: Path = Path(),
     max_workers: int = 4,
-) -> tuple[
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    dict[str, Any],
-]:
+):
     # rho_stack, tau_stack, amp_stack, profile = fetch_rho_tau_amp(
     rho_files, tau_files, amp_files = fetch_rho_tau_amp(
         bounds=bounds,
@@ -395,7 +387,7 @@ def get_coherence_model_coeffs(
 
     (
         amp_mean_file,
-        rho_min_file,
+        rho_file,
         tau_max_file,
         seasonal_A_file,
         seasonal_B_file,
@@ -408,7 +400,7 @@ def get_coherence_model_coeffs(
     )
     return (
         amp_mean_file,
-        rho_min_file,
+        rho_file,
         tau_max_file,
         seasonal_A_file,
         seasonal_B_file,
@@ -482,7 +474,7 @@ def calculate_seasonal_coeffs_files(
     tau_files: Sequence[Path],
     amp_files: Sequence[Path],
     seasonal_ptp_cutoff: float = 0.5,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+):
     """Compute the seasonal A and B parameters from a list of rho files."""
     # Using gdal calc, we can avoid loading everything, and it will save to a new file
     common_opts = " --co TILED=YES --co COMPRESS=LZW --co BIGTIFF=YES"
@@ -497,23 +489,31 @@ def calculate_seasonal_coeffs_files(
 
     # Like the example  https://gdal.org/programs/gdal_calc.html
     # gdal_calc -A input1.tif input2.tif input3.tif --outfile=result.tif --calc="numpy.max(A,axis=0)"
-    # Get the peak-to-peak raster first:
     a, b, c, d = rho_files
-    ptp_out = a.parent / "rho_ptp.tif"
-    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={ptp_out} --calc='numpy.ptp(A,axis=0)'"
-    if not ptp_out.exists():
-        _log_and_run(cmd)
-
     # Get the minimum of rho:
-    rho_min_out = a.parent / "rho_min_out.tif"
+    rho_min_out = a.parent / "rho_min.tif"
     cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={rho_min_out} --calc='numpy.min(A,axis=0)'"
     if not rho_min_out.exists():
         _log_and_run(cmd)
 
     # Get the maximum of rho:
-    rho_min_out = a.parent / "rho_min.tif"
-    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={rho_min_out} --calc='numpy.max(A,axis=0)'"
-    if not rho_min_out.exists():
+    rho_max_out = a.parent / "rho_max.tif"
+    cmd = f"{base_cmd} -A {a} {b} {c} {d} --outfile={rho_max_out} --calc='numpy.max(A,axis=0)'"
+    if not rho_max_out.exists():
+        _log_and_run(cmd)
+
+    # Get a scaled, clipped version of rho to make the simulations noisier
+    rho_shrunk_out = a.parent / "rho_shrunk.tif"
+    # shrink down all long term coherences, but extra shrink the lower starting ones
+    calc_str = "numpy.where(A < 0.2, A**4, A**2)"
+    cmd = f"{base_cmd} -A {rho_min_out} --outfile={rho_shrunk_out} --calc='{calc_str}'"
+    if not rho_shrunk_out.exists():
+        _log_and_run(cmd)
+
+    # Get the peak-to-peak raster:
+    ptp_out = a.parent / "rho_ptp.tif"
+    cmd = f"{base_cmd} -A {rho_max_out} -B {rho_min_out} --outfile={ptp_out} --calc='A - B'"
+    if not ptp_out.exists():
         _log_and_run(cmd)
 
     # Calculate the seasonal mask:
@@ -542,7 +542,7 @@ def calculate_seasonal_coeffs_files(
 
     return (
         amp_mean_out,
-        rho_min_out,
+        rho_shrunk_out,
         tau_max_out,
         seasonal_A_out,
         seasonal_B_out,

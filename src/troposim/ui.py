@@ -17,7 +17,8 @@ from ._types import Bbox, PathOrStr
 SENTINEL_WAVELENGTH = 0.055465763  # meters
 METERS_TO_PHASE = 4 * 3.14159 / SENTINEL_WAVELENGTH
 SEASONS = []
-HDF5_KWARGS = {"chunks": True, "compression": "gzip"}
+# HDF5_KWARGS = {"chunks": (4, 128, 128), "compression": "lzf"}
+HDF5_KWARGS = {}
 BLOCK_SHAPE = (256, 256)
 
 logger = logging.getLogger("troposim")
@@ -415,18 +416,24 @@ def create_turbulence(
     # generally not necessary to go that high res, we'll use 60 meters, then upsample
     # to full scale
     res_y, res_x = resolution
-    upsample_y = int(round(60 / res_y))
-    upsample_x = int(round(60 / res_x))
     with h5py.File(out_hdf5, "w") as hf:
         dset = hf.create_dataset("data", shape=shape3d, dtype="float32", **HDF5_KWARGS)
         for idx in tqdm(list(range(num_days))):
-            shape2d_down = (shape2d[0] // upsample_y, shape2d[1] // upsample_x)
+            # Version with upsampling: not much faster...
+            # upsample_y = int(round(60 / res_y))
+            # upsample_x = int(round(60 / res_x))
+            # shape2d_down = (shape2d[0] // upsample_y, shape2d[1] // upsample_x)
+            # turb_meters = turbulence.simulate(
+            #     shape=shape2d_down, resolution=60, max_amp=max_amp_meters
+            # )
+            # # Get the final raster by upsampling the smaller turbulence
+            # turb_rad = _interpolate_data(turb_meters * METERS_TO_PHASE, shape=shape2d)
+            # dset.write_direct(turb_rad, dest_sel=idx)
+
             turb_meters = turbulence.simulate(
-                shape=shape2d_down, resolution=60, max_amp=max_amp_meters
+                shape=shape2d, resolution=res_y, max_amp=max_amp_meters
             )
-            # Get the final raster by upsampling the smaller turbulence
-            turb_rad = _interpolate_data(turb_meters * METERS_TO_PHASE, shape=shape2d)
-            dset.write_direct(turb_rad, dest_sel=idx)
+            dset.write_direct(turb_meters * METERS_TO_PHASE, dest_sel=idx)
 
 
 def create_defo_stack(
@@ -529,7 +536,7 @@ def _interpolate_data(
     interp = RegularGridInterpolator(orig_coords, data, method=method)
 
     # Create a mesh grid for the new coordinates
-    mesh = np.meshgrid(*new_coords, indexing="xy", sparse=True)
+    mesh = np.meshgrid(*new_coords, indexing="xy")
 
     # Perform the interpolation
-    return interp(np.array(mesh).T)
+    return interp(np.array(mesh).T.astype("float32"))

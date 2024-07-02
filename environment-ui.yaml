@@ -15,5 +15,6 @@ dependencies:
   - scipy
   - numpy
   - pydantic
+  - pydantic-settings
   - tqdm
 prefix: /Users/staniewi/miniconda3/envs/mapping-gdal39
