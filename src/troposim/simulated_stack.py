@@ -11,37 +11,72 @@ from . import decorrelation, deformation, stratified, turbulence, utils
 
 SENTINEL_WAVELENGTH = 5.5465763  # cm
 
+
 # TODO: utils.record_params_as_yaml
 # TODO: downsample as data augmentation
 def generate_stacks(
-    demfile,
-    outfile="simulated_stack.h5",
-    dsets=["defo", "stratified", "turbulence", "decorrelation"],
-    num_days=9,
-    num_defos=120,
-    defo_shape=(200, 200),
-    add_day1_turbulence=False,
-    turbulence_kwargs={},  # p0=1e-2,
-    stratified_kwargs={},
-    deformation_kwargs={},
-):
-    # SRTM DEM pixel spacing, in degrees
+    demfile: str,
+    outfile: str = "simulated_stack.h5",
+    dsets: list[str] = ["defo", "stratified", "turbulence", "decorrelation"],
+    num_days: int = 9,
+    num_defos: int = 120,
+    defo_shape: tuple[int, int] = (200, 200),
+    add_day1_turbulence: bool = False,
+    turbulence_kwargs: dict = {},
+    stratified_kwargs: dict = {},
+    deformation_kwargs: dict = {},
+) -> str:
+    """
+    Generate simulated InSAR stacks with various atmospheric and deformation components.
+
+    Parameters
+    ----------
+    demfile : str
+        Path to the input DEM file.
+    outfile : str, optional
+        Path to the output HDF5 file, by default "simulated_stack.h5".
+    dsets : List[str], optional
+        List of datasets to generate, by default ["defo", "stratified", "turbulence", "decorrelation"].
+    num_days : int, optional
+        Number of days in the time series, by default 9.
+    num_defos : int, optional
+        Number of deformation events to simulate, by default 120.
+    defo_shape : Tuple[int, int], optional
+        Shape of each deformation event, by default (200, 200).
+    add_day1_turbulence : bool, optional
+        Whether to add turbulence on the first day, by default False.
+    turbulence_kwargs : Dict, optional
+        Additional kwargs for turbulence simulation, by default {}.
+    stratified_kwargs : Dict, optional
+        Additional kwargs for stratified delay simulation, by default {}.
+    deformation_kwargs : Dict, optional
+        Additional kwargs for deformation simulation, by default {}.
+
+    Returns
+    -------
+    str
+        Path to the output HDF5 file.
+
+    Notes
+    -----
+    This function simulates various components of an InSAR time series, including
+    stratified atmospheric delay, turbulent atmospheric delay, decorrelation noise,
+    and deformation events. The results are saved in an HDF5 file.
+    """
     res_30_degrees = 0.000277777777
 
     with rio.open(demfile) as src:
-        dem = src.read(1)
-        dem = dem.astype(np.float32)
+        dem = src.read(1).astype(np.float32)
         resolution = round(src.transform[0] / res_30_degrees * 30)
 
-    # dem = dem[:500, :500]
     shape = dem.shape
     stratified_kwargs.update({"K_params": {"shape": (num_days,)}})
     print(stratified_kwargs)
     strat = stratified.simulate(dem, **stratified_kwargs)
     print(
-        f"Stratified (min, max, mean): {strat.min(), strat.max(), strat.mean(axis=(1,2))}"
+        f"Stratified (min, max, mean): {strat.min(), strat.max(), strat.mean(axis=(1, 2))}"
     )
-    # Multiply by 100 to make into cm
+
     turb = 100 * turbulence.simulate(
         shape=(num_days, *shape), resolution=resolution, **turbulence_kwargs
     )
@@ -51,35 +86,14 @@ def generate_stacks(
         )
         turb += turb_day1.reshape((1, *shape))
     print(
-        f"Turbulence (min, max, mean): {turb.min(), turb.max(), turb.mean(axis=(1,2))}"
+        f"Turbulence (min, max, mean): {turb.min(), turb.max(), turb.mean(axis=(1, 2))}"
     )
 
-    # Decorrelation phase from a random coherence map
-    # The coherence map is generated from the turbulence function, but it's just
-    # a random function to spatially vary the coherence.
     looks = 50
     coh = np.clip(0.5 + 100 * turbulence.simulate(shape=shape), 0, 1)
     coh = np.tile(coh, (num_days, 1, 1))
     cohphase = decorrelation.simulate(coh, looks) * PHASE_TO_CM_S1
-    # cohphase = np.zeros((num_days, shape[0], shape[1]), dtype=np.float32)
-    # for i in range(num_days):
-    #     cohphase[i] = decorr.coherence2decorrelation_phase(coh, looks)
-    #     cohphase[i] *= constants.PHASE_TO_CM_S1
-    # with ProcessPoolExecutor(max_workers=num_days) as executor:
-    #     futures = [
-    #         executor.submit(
-    #             decorrelation.simulate
-    #             coh,
-    #             looks,
-    #         )
-    #         for _ in range(num_days)
-    #     ]
-    #     for future in as_completed(futures):
-    #         cohphase.append(future.result() * PHASE_TO_CM_S1)
-    # cohphase = np.array(cohphase)
     print(f"Cohphase (min, max): {cohphase.min(), cohphase.max()}")
-
-    # noise_total = strat + turb + cohphase
 
     defo_stack = np.zeros((num_days, shape[0], shape[1]), dtype=np.float32)
 
@@ -101,12 +115,7 @@ def generate_stacks(
 
             row = np.random.randint(0, shape[0] - defo_shape[0])
             col = np.random.randint(0, shape[1] - defo_shape[1])
-            #  randint is (inclusive, exclusive)
-            # date_idx = np.random.randint(1, num_days - 1)
-            # defo can go on any date, but the network will ignore it if it
-            # appears on the first or last date
             date_idx = np.random.randint(0, num_days)
-            # add the deformation to the stack at all points on or after `date_idx`
             defo_stack[
                 date_idx:, row : row + defo_shape[0], col : col + defo_shape[1]
             ] += defo
@@ -141,8 +150,6 @@ def generate_stacks(
             )
             for k, v in attrs[dset].items():
                 hf[dset].attrs[k] = v
-    # stack = noise_total.copy()
-    # stack += defo_stack
     return outfile
 
 
@@ -187,7 +194,7 @@ def data_loader(
     no_noise : bool
         Whether to skip loading the noise file. Defaults to False.
     sim_file :
-        
+
 
     Yields
     -------
@@ -242,7 +249,7 @@ def data_loader(
         full_shape[-2:], chunk_size, overlaps=(0, 0), start_offsets=(0, 0)
     )
 
-    for (rows, cols) in blk_slices:
+    for rows, cols in blk_slices:
         # with h5py.File(sim_file) as hf:
         dem_chunk = dem[slice(*rows), slice(*cols)].astype(np.float32)
         defo = defo_stack[:, slice(*rows), slice(*cols)]
@@ -298,10 +305,10 @@ def load_all_data(
     chunk_size :
         (Default value = (48)
     48) :
-        
+
     looks : tuple[int, int]
         (Default value = (1, 1)
-        
+
     normalize :
         (Default value = False)
     no_noise :
@@ -312,7 +319,7 @@ def load_all_data(
         (Default value = 0.7 cm)
     max_y : float
         (Default value = 5 cm)
-    
+
     """
     if sim_file_list is None:
         sim_file_list = glob.glob(sim_file_glob)
@@ -459,6 +466,7 @@ class LogMeanScaler:
 
 class Scaler:
     """ """
+
     def __init__(self, scale_percentile=95):
         self.mean_, self.scale_ = None, None
         self.dem_mean_, self.dem_scale_ = None, None

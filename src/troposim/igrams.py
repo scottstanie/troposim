@@ -25,14 +25,14 @@ class IgramMaker:
     # freq0: float = 1e-4
     start_date: date = date(2018, 1, 1)
     repeat_interval_days: int = 12
-    sar_stack: np.ndarray = None
+    sar_stack: np.ndarray | None = None
     to_cm: bool = True
     defo_rates: Tuple[float] = (0.0,)
     defo_sigma = 5
     smooth_defo_days: int = 2
     # num_bad_days = 5
     # bad_day_mult = 8
-    ref: Tuple[int] = (5, 5)
+    ref: Tuple[int, int] = (5, 5)
 
     def make_sar_dates(self):
         """ """
@@ -105,11 +105,29 @@ class IgramMaker:
         sar_stack=None,
         **sar_stack_kwargs,
     ):
-        """
+        """Create the interferogram stack from the SAR stack.
+
+        Parameters
+        ----------
+        save_ext : str
+            Extension to save the igram stack to. Defaults to None.
+        independent : bool
+            Whether to select independent or redundant dates. Defaults to True.
+        max_date : str
+            The maximum date to use in the stack. Defaults to None.
+        max_date_idx : int
+            The maximum date index to use in the stack. Defaults to None.
+        max_temporal_baseline : int
+            The maximum temporal baseline (in days) to use in the stack. Defaults to 5000.
+        sar_stack : np.ndarray
+            The SAR stack to use. Defaults to None.
+        sar_stack_kwargs : dict
+            Keyword arguments to pass to `make_sar_stack` if `sar_stack` is None.
+
         Returns
         -------
-        ndarray
-            3D stack of interferograms
+        igram_stack : np.ndarray (3D)
+            The interferogram stack.
         """
         if sar_stack is None:
             if self.sar_stack is None:
@@ -132,6 +150,7 @@ class IgramMaker:
 
         igram_stack = []  # list of arrays
         temporal_baselines = []
+        selected_dates = []
         for early_date, late_date in igram_date_list:
             if (late_date - early_date).days > max_temporal_baseline:
                 continue
@@ -140,6 +159,7 @@ class IgramMaker:
             late_idx = self.sar_date_list.index(late_date)
             early, late = self.sar_stack[early_idx], self.sar_stack[late_idx]
 
+            selected_dates.append((early_date, late_date))
             # igram = np.abs(late) - np.abs(early) . # Why abs val??
             igram = late - early
             igram_stack.append(igram)
@@ -154,7 +174,7 @@ class IgramMaker:
                 # igram_fname_list.append(fname)
 
         igram_stack = np.array(igram_stack)
-        self.igram_date_list = igram_date_list
+        self.igram_date_list = selected_dates
         self.temporal_baselines = np.array(temporal_baselines)
         return igram_stack
 
@@ -163,7 +183,11 @@ class IgramMaker:
         if ref is None:
             ref = self.ref
         # Add nones to keep 3D
-        ref_points = igram_stack[:, ref[0], ref[1]][:, None, None]
+        ref_points = igram_stack[:, ref[0], ref[1]]
+        if ref_points.ndim == 1:
+            ref_points = ref_points[:, None, None]
+        else:
+            ref_points = ref_points.mean(axis=(1, 2), keepdims=True)
         return igram_stack - ref_points
 
     def _make_time_evolution(self, rates, smooth):
