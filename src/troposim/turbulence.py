@@ -9,6 +9,7 @@ which was a Python translation in MintPy of the matlab scripts written by
 Ramon Hanssen, May 2000, available in the following website:
     http://doris.tudelft.nl/software/insarfractal.tar.gz
 """
+
 import copy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -103,7 +104,6 @@ def simulate(
 
     # Make `beta` into an array of Polynomials, with length = num_images
     beta = _standardize_beta(beta, num_images, verbose=verbose)
-
     if num_images > 1:
         #  3D output, so make sure `p0` is an array of the correct length
         if np.atleast_1d(p0).size == 1:
@@ -337,6 +337,7 @@ class Psd:
         freq0=None,
         freq=None,
         psd1d=None,
+        p0=None,
     ):
         self.beta = _standardize_beta(beta, 1)[0]
         self.shape = shape
@@ -350,19 +351,19 @@ class Psd:
         self.resolution = resolution
         self.freq = freq
         self.freq0 = self._get_freq0(freq, freq0)
+
+        self.p0 = p0 if p0 is not None else self._eval_freq(self.freq0, self.beta)
         if psd1d is not None:
             self.psd1d = np.array(psd1d)
         else:
-            self.psd1d = self._eval_freq(self.freq, self.beta)
+            psd1d = self._eval_freq(self.freq, self.beta)
+            psd1d *= self.p0 / self._eval_freq(self.freq0, self.beta)
+            self.psd1d = psd1d
 
     @staticmethod
     def _eval_freq(freq, beta):
         """Evaluate the power spectral density at a given frequency"""
         return np.power(10, beta(np.log10(freq)))
-
-    @property
-    def p0(self):
-        return self._eval_freq(self.freq0, self.beta)
 
     def simulate(self, shape=None, **kwargs):
         """Simulate a power spectral density.
@@ -441,6 +442,7 @@ class Psd:
 
         # calculate slopes from spectrum
         beta_hat = cls.fit_psd1d(freq, psd1d, deg=deg)
+        p0 = cls._eval_freq(freq0, beta_hat)
         beta_hat = np.array([beta_hat])
         return Psd(
             beta=beta_hat,
@@ -448,6 +450,7 @@ class Psd:
             shape=image.shape,
             psd1d=psd1d,
             freq0=freq0,
+            p0=p0,
         )
 
     @staticmethod
