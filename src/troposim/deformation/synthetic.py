@@ -401,3 +401,35 @@ def multiple_gaussians(
         image += noise_sigma * np.random.standard_normal(shape)
 
     return image, blob_locations
+
+
+def create_cylinder(shape, resolution, bowl_size_meters, bowl_amplitude):
+    """
+    Create a 2D array representing a cylinder/bowl in the middle of the image.
+
+    Parameters:
+    - shape: tuple (height, width) of the image in pixels
+    - resolution: spatial resolution in meters per pixel
+    - bowl_size_meters: diameter of the bowl in meters
+    - bowl_amplitude: height/depth of the bowl
+
+    Returns:
+    - 2D numpy array with the bowl shape
+    """
+    height, width = shape
+    bowl_size_pixels = bowl_size_meters / resolution
+
+    # Create coordinate grids
+    y, x = np.ogrid[:height, :width]
+
+    # Calculate center coordinates
+    center_y, center_x = height // 2, width // 2
+
+    # Calculate distance from center for each pixel
+    dist_from_center = np.sqrt((y - center_y) ** 2 + (x - center_x) ** 2)
+
+    # Create the bowl shape - zero outside the bowl radius, amplitude inside
+    bowl = np.zeros(shape)
+    bowl[dist_from_center <= bowl_size_pixels / 2] = bowl_amplitude
+
+    return bowl
